@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Pie Clock</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #111;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  }
+  body.idle { cursor: none; }
+  canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #toolbar {
+    position: fixed;
+    top: 10px;
+    right: 14px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #toolbar button {
+    background: #262626;
+    color: #dddddd;
+    border: none;
+    padding: 6px 11px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #toolbar button.active {
+    background: #00b8ff;
+    color: #111111;
+  }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button id="btn-840" class="active">8:40:00 から検証</button>
+  <button id="btn-1220">12:20:45 から検証</button>
+  <button id="btn-live">現在時刻で動作</button>
+  <button id="btn-align">③目印: 時の線に右端揃え</button>
+  <button id="btn-color">色を再抽選</button>
+  <button id="btn-bg">背景: ダーク(#111)</button>
+</div>
+<canvas id="clock"></canvas>
+<script>
+(() => {
+  'use strict';
+  const TAU = Math.PI * 2;
+  const START = -Math.PI / 2; // 12時の位置
+  const RING_RATIO = 0.15;
+
+  const canvas = document.getElementById('clock');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  /* ---------- 状態管理 ---------- */
+  let darkBg = true;
+  let activePattern = null;   // null = 4分割比較, 0〜3 = 単体拡大
+  let centerMarker = false;   // false = 時の線に端を揃える(画像1準拠), true = 時の線の中央に配置
+  let simStart = { h: 8, m: 40, s: 0, t0: performance.now() };
+  let useMockupColors = false;
+
+  const MOCKUP_PALETTE_A = ['#8fd3f4', '#009933', '#005b82', '#8c0044'];
+  const MOCKUP_PALETTE_B = ['#8fd3f4', '#009933', '#fff000', '#e60012'];
+
+  /* ---------- カラー生成 ---------- */
+  function hsl2hex(h, s, l) {
+    h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const x = v => Math.round(v * 255).toString(16).padStart(2, '0');
+    return '#' + x(f(0)) + x(f(8)) + x(f(4));
+  }
+
+  // [0:秒明色, 1:秒暗色, 2:長針明色, 3:短針/内円暗色, 4:時マーカー用ビビッド]
+  let palette = [];
+
+  function newPalette() {
+    const base = Math.random() * 360;
+    const hues = [0, 1, 2, 3, 4].map(i => base + i * 72 + (Math.random() - 0.5) * 18);
+    for (let i = hues.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [hues[i], hues[j]] = [hues[j], hues[i]];
+    }
+    let next;
+    do {
+      next = [
+        hsl2hex(hues[0], 92 + Math.random() * 8, 56 + Math.random() * 8), // 0: 秒（明色）
+        hsl2hex(hues[1], 78 + Math.random() * 14, 24 + Math.random() * 5), // 1: 秒（低明度）
+        hsl2hex(hues[2], 92 + Math.random() * 8, 58 + Math.random() * 8), // 2: 長針（明色）
+        hsl2hex(hues[3], 82 + Math.random() * 14, 26 + Math.random() * 6), // 3: 短針/内円（低明度）
+        hsl2hex(hues[4], 90 + Math.random() * 10, 48 + Math.random() * 8), // 4: 時マーカー用ビビッド
+      ];
+    } while (new Set(next).size !== 5 || next.some(c => palette.includes(c)));
+    palette = next;
+  }
+  newPalette();
+
+  /* ---------- リサイズ ---------- */
+  let W = 0, H = 0, dpr = 1;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+
+  /* ---------- 基本図形 ---------- */
+  function circle(cx, cy, r, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.fill();
+  }
+
+  function sector(cx, cy, r, startAngle, endAngle, color) {
+    if (endAngle <= startAngle) return;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 内径 rIn 〜 外径 rOut のリング扇形（overlapInner=true のときは内円との隙間防止で1px内側に重ねる）
+  function ringSector(cx, cy, rIn, rOut, startAngle, endAngle, color, overlapInner = true) {
+    if (endAngle <= startAngle) return;
+    const inner = overlapInner ? Math.max(0, rIn - 1) : rIn;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOut, startAngle, endAngle, false);
+    ctx.arc(cx, cy, inner, endAngle, startAngle, true);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function pieFrom12(cx, cy, r, progress, fg, bg) {
+    circle(cx, cy, r, bg);
+    if (progress > 0) {
+      sector(cx, cy, r, START, START + TAU * Math.min(progress, 1), fg);
+    }
+  }
+
+  /* ---------- 4つの検証パターン ---------- */
+
+  // ① 低明度左上（短針[滑らか移動]➔長針＝明色 / 残り＝低明度）
+  function drawPattern1(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
+    const [secBright, secDark, minBright, hrDark] = p;
+    const r = R * (1 - RING_RATIO);
+    pieFrom12(cx, cy, R, secProg, secBright, secDark);
+    circle(cx, cy, r, hrDark);
+    const aHr = START + TAU * hrSmooth;
+    let aMin  = START + TAU * minProg;
+    if (aMin <= aHr) aMin += TAU;
+    sector(cx, cy, r, aHr, aMin, minBright);
+  }
+
+  // ② 低明度＋12時基準（長針＝12時から明色 / 内側扇形＝時[滑らか移動]）
+  function drawPattern2(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
+    const [secBright, secDark, minBright, hrDark, colMarker] = p;
+    const r = R * (1 - RING_RATIO);
+    pieFrom12(cx, cy, R, secProg, secBright, secDark);
+    pieFrom12(cx, cy, r, minProg, minBright, hrDark);
+    sector(cx, cy, r * 0.56, START, START + TAU * hrSmooth, colMarker);
+  }
+
+  // ③ パターンA（画像1）：
+  // ・短針の目印は必ずその「時」の位置（8時なら8の位置）を指す
+  // ・目印は内円にも外周にも一切はみ出さず、秒リングの帯（r 〜 R）の中にピタッと綺麗に収める
+  function drawPattern3(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
+    const [colMinFg, colMinBg, colSec, colHr] = useMockupColors
+      ? MOCKUP_PALETTE_A
+      : [p[2], p[3], p[0], p[4]];
+    const r = R * (1 - RING_RATIO); // 内円の半径（＝秒リングの内径）
+
+    // 1. 外側の秒リング（r 〜 R）
+    ringSector(cx, cy, r, R, START, START + TAU * secProg, colSec, true);
+
+    // 2. 短針（時）の目印：秒リングの帯（r 〜 R）の厚みに100%ぴったり収まる扇形ブロック
+    const aHr = START + TAU * hrFixed; // 必ずその時間の数字の位置（8時なら240°）
+    const markerSpan = 0.095;          // 目印の角度幅（約5.4°）
+    const mStart = centerMarker ? aHr - markerSpan / 2 : aHr - markerSpan;
+    const mEnd   = centerMarker ? aHr + markerSpan / 2 : aHr;
+    ringSector(cx, cy, r, R, mStart, mEnd, colHr, true);
+
+    // 3. 内側の円（分）を最後に上から描くことで、内円側へのはみ出しをゼロにし境界を完全にフラットにする
+    circle(cx, cy, r, colMinBg);
+    sector(cx, cy, r, START, START + TAU * minProg, colMinFg);
+  }
+
+  // ④ パターンB（画像2）：中心の小さい扇形で秒（経過分のみ）＋ 外周上の丸ドット時マーカー
+  function drawPattern4(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
+    const [colMinFg, colMinBg, colSec, colHr] = useMockupColors
+      ? MOCKUP_PALETTE_B
+      : [p[2], p[3], p[0], p[4]];
+    const r = R * 0.91;
+    const rSec = r * 0.285;
+    const rDot = r * 0.068;
+
+    circle(cx, cy, r, colMinBg);
+    sector(cx, cy, r, START, START + TAU * minProg, colMinFg);
+    sector(cx, cy, rSec, START, START + TAU * secProg, colSec);
+
+    const aHr = START + TAU * hrFixed;
+    const dotX = cx + Math.cos(aHr) * r;
+    const dotY = cy + Math.sin(aHr) * r;
+    circle(dotX, dotY, rDot, colHr);
+  }
+
+  const PATTERNS = [
+    { fn: drawPattern1, label: '① 低明度左上（短針[滑らか移動]➔長針＝明色 / 残り＝低明度）' },
+    { fn: drawPattern2, label: '② 低明度＋12時基準（長針＝12時から明色 / 内側扇形＝短針）' },
+    { fn: drawPattern3, label: '③ パターンA：秒エリア内に収まる時マーカー（8の位置に固定）' },
+    { fn: drawPattern4, label: '④ パターンB：中心秒扇形＋外周の丸ドット（8の位置に固定）' },
+  ];
+
+  let lastMinuteKey = -1;
+
+  function frame() {
+    let now;
+    if (simStart !== null) {
+      const elapsed = performance.now() - simStart.t0;
+      const base = new Date();
+      base.setHours(simStart.h, simStart.m, simStart.s, 0);
+      now = new Date(base.getTime() + elapsed);
+    } else {
+      now = new Date();
+    }
+
+    const key = Math.floor(now.getTime() / 60000);
+    if (key !== lastMinuteKey) {
+      if (lastMinuteKey !== -1 && !useMockupColors) newPalette();
+      lastMinuteKey = key;
+    }
+
+    const sec = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
+    const min = (now.getMinutes() + sec) / 60;
+    const h   = now.getHours() % 12;
+    const hrFixed  = h / 12;          // パターン3・4用：その「時」の数字の位置（8時なら8の位置）
+    const hrSmooth = (h + min) / 12;  // パターン1・2用：分に合わせて滑らかに移動（8:40なら8と9の間）
+
+    const bg = darkBg ? '#111111' : '#ffffff';
+    const divider = darkBg ? '#262626' : '#e0e0e0';
+    const labelColor = darkBg ? '#aaaaaa' : '#444444';
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineCap = 'butt';
+
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+
+    if (activePattern === null) {
+      const cw = W / 2;
+      const ch = H / 2;
+      const R = Math.min(cw, ch) * 0.82 / 2;
+
+      for (let i = 0; i < 4; i++) {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const x0 = col * cw;
+        const y0 = row * ch;
+        const cx = x0 + cw / 2;
+        const cy = y0 + ch / 2 + 10;
+
+        PATTERNS[i].fn(cx, cy, R, hrFixed, hrSmooth, min, sec, palette);
+
+        ctx.fillStyle = labelColor;
+        ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`${PATTERNS[i].label} [${hh}:${mm}:${ss}]`, x0 + 14, y0 + 12);
+      }
+
+      ctx.fillStyle = divider;
+      ctx.fillRect(cw - 0.5, 0, 1, H);
+      ctx.fillRect(0, ch - 0.5, W, 1);
+    } else {
+      const R = Math.min(W, H) * 0.90 / 2;
+      PATTERNS[activePattern].fn(W / 2, H / 2, R, hrFixed, hrSmooth, min, sec, palette);
+
+      ctx.fillStyle = labelColor;
+      ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${PATTERNS[activePattern].label} [${hh}:${mm}:${ss}]（クリックで4分割に戻る）`, 16, 14);
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- UI操作 ---------- */
+  const btn840 = document.getElementById('btn-840');
+  const btn1220 = document.getElementById('btn-1220');
+  const btnLive = document.getElementById('btn-live');
+  const btnAlign = document.getElementById('btn-align');
+  const btnColor = document.getElementById('btn-color');
+  const btnBg = document.getElementById('btn-bg');
+
+  function setTimeButtonActive(target) {
+    [btn840, btn1220, btnLive].forEach(b => b.classList.toggle('active', b === target));
+  }
+
+  btn840.addEventListener('click', e => {
+    e.stopPropagation();
+    simStart = { h: 8, m: 40, s: 0, t0: performance.now() };
+    useMockupColors = false;
+    setTimeButtonActive(btn840);
+  });
+
+  btn1220.addEventListener('click', e => {
+    e.stopPropagation();
+    simStart = { h: 12, m: 20, s: 45, t0: performance.now() };
+    useMockupColors = true;
+    setTimeButtonActive(btn1220);
+  });
+
+  btnLive.addEventListener('click', e => {
+    e.stopPropagation();
+    simStart = null;
+    useMockupColors = false;
+    setTimeButtonActive(btnLive);
+  });
+
+  btnAlign.addEventListener('click', e => {
+    e.stopPropagation();
+    centerMarker = !centerMarker;
+    btnAlign.textContent = centerMarker ? '③目印: 時の線に中央揃え' : '③目印: 時の線に右端揃え';
+    btnAlign.classList.toggle('active', centerMarker);
+  });
+
+  btnColor.addEventListener('click', e => {
+    e.stopPropagation();
+    useMockupColors = false;
+    newPalette();
+  });
+
+  btnBg.addEventListener('click', e => {
+    e.stopPropagation();
+    darkBg = !darkBg;
+    btnBg.textContent = darkBg ? '背景: ダーク(#111)' : '背景: 白(#fff)';
+  });
+
+  canvas.addEventListener('click', e => {
+    if (activePattern === null) {
+      const col = e.clientX < W / 2 ? 0 : 1;
+      const row = e.clientY < H / 2 ? 0 : 1;
+      activePattern = row * 2 + col;
+    } else {
+      activePattern = null;
+    }
+  });
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
