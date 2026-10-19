@@ -31,20 +31,49 @@
     inset: 0;
     width: 100%;
     height: 100%;
+    height: 100dvh;
   }
   .ui-panel {
-    transition: opacity 0.4s ease;
+    transition: opacity 0.35s ease;
     z-index: 10;
+  }
+  #mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: max(10px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    background: rgba(30, 30, 36, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #ffffff;
+    border: 1px solid #444452;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 20px;
+    cursor: pointer;
+    z-index: 25;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  #mobile-menu-btn:active {
+    background: #38bdf8;
+    color: #111111;
   }
   #toolbar {
     position: fixed;
-    top: 10px;
-    right: 12px;
+    top: max(10px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     max-width: 98vw;
     justify-content: flex-end;
+  }
+  .mobile-header {
+    display: none;
+  }
+  .group-title {
+    display: none;
   }
   .btn-group {
     display: flex;
@@ -62,6 +91,7 @@
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    touch-action: manipulation;
   }
   #toolbar button.active {
     background: #eeeeee;
@@ -82,19 +112,20 @@
   }
   #scrubber-bar {
     position: fixed;
-    bottom: 12px;
+    bottom: max(10px, env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    width: min(860px, 94vw);
+    width: min(860px, calc(100vw - 24px));
     background: #18181c;
     border: 1px solid #33333a;
-    padding: 8px 16px 10px;
+    padding: 8px 14px 10px;
     display: flex;
     flex-direction: column;
     gap: 4px;
     color: #dddddd;
     font-size: 12px;
     font-weight: 600;
+    box-sizing: border-box;
   }
   .strip-labels {
     display: flex;
@@ -107,7 +138,7 @@
   .scrubber-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
   #sky-strip {
     height: 10px;
@@ -120,17 +151,121 @@
     cursor: pointer;
     accent-color: #ffffff;
     margin: 0;
+    height: 24px;
   }
   #scrubber-time {
     min-width: 66px;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
+
+  /* スマホ・タブレット縦向き用スタイル */
+  @media (max-width: 768px) {
+    #mobile-menu-btn {
+      display: block;
+    }
+    #toolbar {
+      display: none;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      max-width: 100%;
+      background: rgba(14, 14, 18, 0.96);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      overflow-y: auto;
+      z-index: 40;
+      gap: 12px;
+    }
+    #toolbar.mobile-open {
+      display: flex;
+    }
+    .mobile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #2a2a36;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .mobile-close-btn {
+      background: #2a2a36;
+      border: 1px solid #444458;
+      color: #eeeeee;
+      padding: 7px 16px;
+      border-radius: 18px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .group-title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.04em;
+      margin-top: 6px;
+      text-transform: uppercase;
+    }
+    .btn-group {
+      flex-direction: column;
+      background: transparent;
+      border: none;
+      padding: 0;
+      gap: 7px;
+    }
+    #toolbar button {
+      padding: 12px 14px;
+      font-size: 14px;
+      border-radius: 8px;
+      text-align: left;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+    #scrubber-bar {
+      padding: 6px 12px 8px;
+      gap: 3px;
+    }
+    .scrubber-row {
+      gap: 8px;
+    }
+    #scrubber-bar .scrubber-title {
+      font-size: 11px;
+      white-space: nowrap;
+    }
+  }
+  @media (max-width: 480px) {
+    .scrubber-title {
+      display: none;
+    }
+    .strip-labels span:nth-child(2n) {
+      display: none;
+    }
+  }
 </style>
 </head>
 <body>
+<button id="mobile-menu-btn" class="ui-panel">⚙️ 設定</button>
+
 <div id="toolbar" class="ui-panel">
-  <!-- カラーテーマ切り替え -->
+  <div class="mobile-header">
+    <span>Pie Clock 設定</span>
+    <button id="mobile-close-btn" class="mobile-close-btn">✕ 閉じる</button>
+  </div>
+
+  <div class="group-title">カラーテーマ</div>
   <div class="btn-group">
     <button id="btn-theme-hourgrad" class="theme-active">① 短針だけグラデ 🌅</button>
     <button id="btn-theme-sky24h">② 短針・長針とも単色(24h空色) 🌤️</button>
@@ -138,14 +273,24 @@
     <button id="btn-theme-classic">④ 従来ソリッド版 🎨</button>
     <button id="btn-grad-dir">短針グラデ方向: 天頂➔地平線</button>
   </div>
-  <!-- 秒リングのグラデーション／ソリッド切り替え ＆ 表示モード -->
+
+  <div class="group-title">秒リング＆短針</div>
   <div class="btn-group">
     <button id="btn-sec-grad" class="sec-active">秒リング: グラデーション ✨</button>
+    <button id="btn-hour-mode">短針: 滑らか</button>
+  </div>
+
+  <div class="group-title">画面モード</div>
+  <div class="btn-group">
     <button id="btn-live" class="active">現在時刻</button>
     <button id="btn-all8">8フェーズ一覧</button>
     <button id="btn-compare">昼(12:20) vs 夕陽(17:05)</button>
     <button id="btn-timelapse">24h早送り</button>
-    <button id="btn-hour-mode">短針: 滑らか</button>
+  </div>
+
+  <div class="group-title">ディスプレイ</div>
+  <div class="btn-group">
+    <button id="btn-wake-lock" class="sec-active">📱 スリープ防止: ON</button>
   </div>
 </div>
 
@@ -156,7 +301,7 @@
   </div>
   <div id="sky-strip" title="短針（空の色）の24時間連続グラデーション推移"></div>
   <div class="scrubber-row">
-    <span>短針(空の色) 24h連続推移</span>
+    <span class="scrubber-title">短針(空の色) 24h連続推移</span>
     <input id="time-slider" type="range" min="0" max="86399" step="1" value="61500">
     <span id="scrubber-time">17:05:00</span>
   </div>
@@ -781,13 +926,17 @@
   let W = 0, H = 0, dpr = 1;
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 3);
-    W = window.innerWidth;
-    H = window.innerHeight;
+    const vv = window.visualViewport;
+    W = vv ? Math.round(vv.width) : window.innerWidth;
+    H = vv ? Math.round(vv.height) : window.innerHeight;
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', resize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+  }
 
   function circle(cx, cy, r, fillStyle) {
     ctx.fillStyle = fillStyle;
@@ -965,24 +1114,39 @@
 
       scrubberTimeLabel.textContent = formatHMS(targetDate);
 
-      const R = Math.min(W, H) * 0.74 / 2;
+      const isMobile = Math.min(W, H) < 600;
+      const isPortrait = W < H;
+      const R = Math.min(W, H) * (isMobile ? (isPortrait ? 0.78 : 0.72) : 0.74) / 2;
       const colors = drawClockForDate(W / 2, H / 2, R, targetDate);
 
       if (!document.body.classList.contains('idle')) {
-        ctx.fillStyle = '#eeeeee';
-        ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(
-          `${formatHMS(targetDate)}  [${colors.phase.range} : ${colors.phase.name}]  短針(空) HSL(${colors.hsl.h}°, ${colors.hsl.s}%, ${colors.hsl.l}%)`,
-          20, 26
-        );
+        if (isMobile) {
+          ctx.fillStyle = '#eeeeee';
+          ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillText(`${formatHMS(targetDate)}  [${colors.phase.name}]`, 16, 26);
 
-        ctx.fillStyle = '#9999a5';
-        ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-        ctx.fillText(
-          `${themeTitle}`,
-          20, 46
-        );
+          ctx.fillStyle = '#9999a5';
+          ctx.font = '500 10px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          const shortThemeTitle = themeMode === 'hourGrad' ? '短針グラデ × 長針単色'
+            : themeMode === 'sky24h' ? '短針・長針とも単色(24h空色)'
+            : themeMode === 'allGrad' ? '短針・長針ともグラデ' : '従来ソリッド版';
+          ctx.fillText(`${shortThemeTitle} (${secGradOn ? '秒グラデ✨' : '秒単色●'})`, 16, 42);
+        } else {
+          ctx.fillStyle = '#eeeeee';
+          ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillText(
+            `${formatHMS(targetDate)}  [${colors.phase.range} : ${colors.phase.name}]  短針(空) HSL(${colors.hsl.h}°, ${colors.hsl.s}%, ${colors.hsl.l}%)`,
+            20, 26
+          );
+
+          ctx.fillStyle = '#9999a5';
+          ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillText(
+            `${themeTitle}`,
+            20, 46
+          );
+        }
       }
 
     } else if (mode === 'compare') {
@@ -990,39 +1154,66 @@
       const d1220 = makeDateFromSeconds(12 * 3600 + 20 * 60 + 45 + elapsedSec);
       const d1705 = makeDateFromSeconds(17 * 3600 + 5 * 60 + 45 + elapsedSec);
 
-      const cw = W / 2;
-      const ch = H - 76;
-      const R = Math.min(cw, ch) * 0.74 / 2;
+      const isPortrait = W < H;
+      if (isPortrait) {
+        const topPad = 42;
+        const botPad = 72;
+        const availH = H - topPad - botPad;
+        const ch = availH / 2;
+        const R = Math.min(W * 0.72, ch * 0.70) / 2;
 
-      const c1 = drawClockForDate(cw / 2, ch / 2 + 24, R, d1220);
-      const c2 = drawClockForDate(cw + cw / 2, ch / 2 + 24, R, d1705);
+        const cy1 = topPad + ch * 0.5 + 8;
+        const cy2 = topPad + ch * 1.5 + 8;
 
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#eeeeee';
-      ctx.font = '700 17px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-      ctx.fillText(`12:20 (${formatHMS(d1220)}) — ${c1.phase.name}`, cw / 2, 34);
-      ctx.fillText(`17:05 (${formatHMS(d1705)}) — ${c2.phase.name}`, cw + cw / 2, 34);
+        const c1 = drawClockForDate(W / 2, cy1, R, d1220);
+        const c2 = drawClockForDate(W / 2, cy2, R, d1705);
 
-      ctx.fillStyle = '#9999a5';
-      ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-      ctx.fillText(themeTitle, cw, 56);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#eeeeee';
+        ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`12:20 (${formatHMS(d1220)}) — ${c1.phase.name}`, W / 2, topPad + 12);
+        ctx.fillText(`17:05 (${formatHMS(d1705)}) — ${c2.phase.name}`, W / 2, topPad + ch + 12);
 
-      ctx.fillStyle = '#26262c';
-      ctx.fillRect(cw - 0.5, 0, 1, H);
+        ctx.fillStyle = '#26262c';
+        ctx.fillRect(16, topPad + ch, W - 32, 1);
+      } else {
+        const cw = W / 2;
+        const ch = H - 76;
+        const R = Math.min(cw, ch) * 0.74 / 2;
+
+        const c1 = drawClockForDate(cw / 2, ch / 2 + 24, R, d1220);
+        const c2 = drawClockForDate(cw + cw / 2, ch / 2 + 24, R, d1705);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#eeeeee';
+        ctx.font = '700 17px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`12:20 (${formatHMS(d1220)}) — ${c1.phase.name}`, cw / 2, 34);
+        ctx.fillText(`17:05 (${formatHMS(d1705)}) — ${c2.phase.name}`, cw + cw / 2, 34);
+
+        ctx.fillStyle = '#9999a5';
+        ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(themeTitle, cw, 56);
+
+        ctx.fillStyle = '#26262c';
+        ctx.fillRect(cw - 0.5, 0, 1, H);
+      }
 
     } else if (mode === 'all8') {
-      const cols = 4, rows = 2;
-      const topPad = 46;
-      const botPad = 82;
+      const isPortrait = W < H;
+      const cols = isPortrait ? 2 : 4;
+      const rows = isPortrait ? 4 : 2;
+      const topPad = isPortrait ? 38 : 46;
+      const botPad = isPortrait ? 76 : 82;
       const cw = W / cols;
       const ch = (H - topPad - botPad) / rows;
-      const R = Math.min(cw, ch) * 0.72 / 2;
+      const R = Math.min(cw * 0.74, ch * 0.70) / 2;
       const elapsedSec = ((performance.now() - compareStart) / 1000) % 60;
 
       ctx.textAlign = 'left';
       ctx.fillStyle = '#38bdf8';
-      ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-      ctx.fillText(`${themeTitle}`, 18, 20);
+      ctx.font = isPortrait ? '700 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif'
+                            : '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(isPortrait ? '8フェーズ一覧 (タップで拡大)' : `${themeTitle}`, 16, 18);
 
       for (let i = 0; i < 8; i++) {
         const col = i % cols;
@@ -1030,7 +1221,7 @@
         const x0 = col * cw;
         const y0 = topPad + row * ch;
         const cx = x0 + cw / 2;
-        const cy = y0 + ch / 2 + 14;
+        const cy = y0 + ch / 2 + (isPortrait ? 12 : 14);
 
         const baseSec = PHASE_LABELS[i].sampleSec;
         const d = makeDateFromSeconds(baseSec - 45 + elapsedSec);
@@ -1041,28 +1232,56 @@
 
         ctx.textAlign = 'center';
         ctx.fillStyle = '#eeeeee';
-        ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-        ctx.fillText(`${i + 1}. ${PHASE_LABELS[i].range} (例 ${hhStr}:${mmStr})`, cx, y0 + 10);
+        ctx.font = isPortrait ? '700 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif'
+                              : '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`${i + 1}. ${PHASE_LABELS[i].range} (${hhStr}:${mmStr})`, cx, y0 + 10);
 
         ctx.fillStyle = '#aaaaaa';
-        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-        ctx.fillText(`${PHASE_LABELS[i].name}`, cx, y0 + 26);
+        ctx.font = isPortrait ? '600 10px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif'
+                              : '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`${PHASE_LABELS[i].name}`, cx, y0 + (isPortrait ? 22 : 24));
 
         if (col > 0) {
           ctx.fillStyle = '#1f1f24';
           ctx.fillRect(x0 - 0.5, topPad, 1, H - topPad - botPad);
         }
       }
-      ctx.fillStyle = '#1f1f24';
-      ctx.fillRect(0, topPad + ch - 0.5, W, 1);
+
+      for (let r = 1; r < rows; r++) {
+        ctx.fillStyle = '#1f1f24';
+        ctx.fillRect(0, topPad + r * ch - 0.5, W, 1);
+      }
     }
 
     requestAnimationFrame(frame);
   }
 
   /* ==========================================================================
-   * 4. UIイベント
+   * 4. UIイベント ＆ モバイル対応
    * ========================================================================== */
+  const toolbar        = document.getElementById('toolbar');
+  const mobileMenuBtn  = document.getElementById('mobile-menu-btn');
+  const mobileCloseBtn = document.getElementById('mobile-close-btn');
+  const btnWakeLock    = document.getElementById('btn-wake-lock');
+
+  function closeMobileDrawer() {
+    if (window.innerWidth <= 768) {
+      toolbar.classList.remove('mobile-open');
+    }
+  }
+
+  mobileMenuBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toolbar.classList.add('mobile-open');
+    wake();
+  });
+
+  mobileCloseBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toolbar.classList.remove('mobile-open');
+    wake();
+  });
+
   const btnHourGrad  = document.getElementById('btn-theme-hourgrad');
   const btnSky24h    = document.getElementById('btn-theme-sky24h');
   const btnAllGrad   = document.getElementById('btn-theme-allgrad');
@@ -1085,6 +1304,7 @@
     if (newTheme === 'classic')  btnClassic.classList.add('theme-active');
     btnGradDir.style.display = (newTheme === 'hourGrad' || newTheme === 'allGrad') ? '' : 'none';
     updateSkyStrip();
+    closeMobileDrawer();
   }
 
   btnHourGrad.addEventListener('click', e => { e.stopPropagation(); setThemeMode('hourGrad'); });
@@ -1115,6 +1335,7 @@
 
   function setActiveButton(target) {
     [btnAll8, btnCompare, btnLive, btnTimelapse].forEach(b => b.classList.toggle('active', b === target));
+    closeMobileDrawer();
   }
 
   btnAll8.addEventListener('click', e => {
@@ -1159,17 +1380,83 @@
 
   canvas.addEventListener('click', e => {
     if (mode === 'all8') {
-      const topPad = 46, botPad = 82;
-      const col = Math.min(3, Math.max(0, Math.floor((e.clientX / W) * 4)));
-      const row = e.clientY < topPad + (H - topPad - botPad) / 2 ? 0 : 1;
-      const idx = row * 4 + col;
-      slider.value = PHASE_LABELS[idx].sampleSec;
-      compareStart = performance.now();
-      mode = 'scrub';
-      setActiveButton(null);
+      const isPortrait = W < H;
+      const cols = isPortrait ? 2 : 4;
+      const rows = isPortrait ? 4 : 2;
+      const topPad = isPortrait ? 38 : 46;
+      const botPad = isPortrait ? 76 : 82;
+      const cw = W / cols;
+      const ch = (H - topPad - botPad) / rows;
+
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      if (clickY >= topPad && clickY <= H - botPad) {
+        const col = Math.min(cols - 1, Math.max(0, Math.floor(clickX / cw)));
+        const row = Math.min(rows - 1, Math.max(0, Math.floor((clickY - topPad) / ch)));
+        const idx = row * cols + col;
+        if (idx >= 0 && idx < PHASE_LABELS.length) {
+          slider.value = PHASE_LABELS[idx].sampleSec;
+          compareStart = performance.now();
+          mode = 'scrub';
+          setActiveButton(null);
+        }
+      }
     } else if (mode === 'scrub') {
       mode = 'all8';
       setActiveButton(btnAll8);
+    }
+  });
+
+  /* ==========================================================================
+   * 5. Screen Wake Lock API（常時点灯） ＆ アイドル制御
+   * ========================================================================== */
+  let wakeLock = null;
+  let wakeLockEnabled = true;
+
+  async function requestWakeLock() {
+    if (!wakeLockEnabled || !('wakeLock' in navigator)) return;
+    try {
+      if (document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+        });
+        btnWakeLock.textContent = '📱 スリープ防止: ON';
+        btnWakeLock.classList.add('sec-active');
+      }
+    } catch (_) {}
+  }
+
+  async function releaseWakeLock() {
+    if (wakeLock) {
+      try { await wakeLock.release(); } catch (_) {}
+      wakeLock = null;
+    }
+    btnWakeLock.textContent = '📱 スリープ防止: OFF';
+    btnWakeLock.classList.remove('sec-active');
+  }
+
+  if ('wakeLock' in navigator) {
+    btnWakeLock.addEventListener('click', async e => {
+      e.stopPropagation();
+      wakeLockEnabled = !wakeLockEnabled;
+      if (wakeLockEnabled) {
+        await requestWakeLock();
+      } else {
+        await releaseWakeLock();
+      }
+    });
+  } else {
+    btnWakeLock.textContent = '📱 スリープ防止: ブラウザ非対応';
+    btnWakeLock.style.opacity = '0.5';
+    btnWakeLock.disabled = true;
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeLockEnabled) {
+      requestWakeLock();
     }
   });
 
@@ -1177,10 +1464,14 @@
   function wake() {
     document.body.classList.remove('idle');
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => document.body.classList.add('idle'), 3500);
+    idleTimer = setTimeout(() => document.body.classList.add('idle'), 4000);
+    if (wakeLockEnabled && !wakeLock) {
+      requestWakeLock();
+    }
   }
   window.addEventListener('mousemove', wake);
   window.addEventListener('pointerdown', wake);
+  window.addEventListener('touchstart', wake, { passive: true });
   wake();
 
   updateSkyStrip();
