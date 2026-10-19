@@ -38,60 +38,122 @@
     z-index: 10;
   }
   #mobile-menu-btn {
-    display: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     position: fixed;
-    top: max(10px, env(safe-area-inset-top));
-    right: max(12px, env(safe-area-inset-right));
-    background: rgba(30, 30, 36, 0.88);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    top: max(12px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    background: rgba(26, 26, 32, 0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     color: #ffffff;
-    border: 1px solid #444452;
-    padding: 7px 14px;
+    border: 1px solid #3c3c4c;
+    padding: 7px 15px;
     font-size: 13px;
     font-weight: 700;
     border-radius: 20px;
     cursor: pointer;
     z-index: 25;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+    transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  }
+  #mobile-menu-btn:hover {
+    background: rgba(38, 38, 48, 0.95);
+    border-color: #55556a;
+    transform: translateY(-1px);
   }
   #mobile-menu-btn:active {
     background: #38bdf8;
     color: #111111;
+    transform: translateY(0);
   }
   #toolbar {
+    display: none;
     position: fixed;
-    top: max(10px, env(safe-area-inset-top));
-    right: max(12px, env(safe-area-inset-right));
+    top: max(12px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    width: 330px;
+    max-width: calc(100vw - 28px);
+    max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
+    background: rgba(18, 18, 24, 0.95);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid #323242;
+    border-radius: 14px;
+    box-shadow: 0 16px 44px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 14px 14px 16px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    z-index: 40;
+    gap: 10px;
+  }
+  #toolbar.open,
+  #toolbar.mobile-open {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    max-width: 98vw;
-    justify-content: flex-end;
   }
   .mobile-header {
-    display: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #2a2a36;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mobile-close-btn {
+    background: #2a2a36;
+    border: 1px solid #444458;
+    color: #eeeeee;
+    padding: 5px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .mobile-close-btn:hover {
+    background: #3e3e50;
+    color: #ffffff;
   }
   .group-title {
-    display: none;
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #38bdf8;
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+    text-transform: uppercase;
   }
   .btn-group {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    background: #18181c;
-    padding: 3px;
-    border: 1px solid #33333c;
+    gap: 5px;
+    background: transparent;
+    padding: 0;
+    border: none;
   }
   #toolbar button {
     background: #222226;
     color: #cccccc;
     border: 1px solid #3a3a42;
-    padding: 5px 10px;
+    padding: 6px 10px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     touch-action: manipulation;
+    border-radius: 6px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  #toolbar button:hover {
+    background: #2a2a32;
+    color: #ffffff;
+    border-color: #555566;
   }
   #toolbar button.active {
     background: #eeeeee;
@@ -114,11 +176,12 @@
     background: #222226;
     color: #cccccc;
     border: 1px solid #3a3a42;
-    padding: 5px 8px;
+    padding: 6px 8px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    max-width: 100%;
+    width: 100%;
+    border-radius: 6px;
   }
   #toolbar select.theme-active {
     background: #38bdf8;
@@ -127,25 +190,16 @@
     font-weight: 700;
   }
   #link-status {
-    flex-basis: 100%;
+    width: 100%;
     font-size: 11px;
     line-height: 1.5;
     color: #9aa0aa;
     white-space: pre-line;
     text-align: left;
-    padding: 2px 4px;
-  }
-  @media (max-width: 768px) {
-    #toolbar select {
-      padding: 12px 14px;
-      font-size: 16px;
-      border-radius: 8px;
-      min-height: 44px;
-    }
-    #link-status {
-      font-size: 12px;
-      padding: 2px 2px 0;
-    }
+    padding: 4px 6px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 6px;
+    box-sizing: border-box;
   }
   #scrubber-bar {
     position: fixed;
@@ -199,10 +253,9 @@
   /* スマホ・タブレット縦向き用スタイル */
   @media (max-width: 768px) {
     #mobile-menu-btn {
-      display: block;
+      display: flex;
     }
     #toolbar {
-      display: none;
       top: 0;
       right: 0;
       bottom: 0;
@@ -211,55 +264,21 @@
       height: 100%;
       height: 100dvh;
       max-width: 100%;
-      background: rgba(14, 14, 18, 0.96);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: flex-start;
+      border-radius: 0;
+      border: none;
       padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
-      box-sizing: border-box;
-      overflow-y: auto;
-      z-index: 40;
       gap: 12px;
     }
-    #toolbar.mobile-open {
-      display: flex;
-    }
     .mobile-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #2a2a36;
-      color: #ffffff;
       font-size: 16px;
-      font-weight: 700;
+      padding-bottom: 10px;
     }
     .mobile-close-btn {
-      background: #2a2a36;
-      border: 1px solid #444458;
-      color: #eeeeee;
       padding: 7px 16px;
-      border-radius: 18px;
       font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .group-title {
-      display: block;
-      font-size: 11px;
-      font-weight: 700;
-      color: #38bdf8;
-      letter-spacing: 0.04em;
-      margin-top: 6px;
-      text-transform: uppercase;
     }
     .btn-group {
       flex-direction: column;
-      background: transparent;
-      border: none;
-      padding: 0;
       gap: 7px;
     }
     #toolbar button {
@@ -270,6 +289,17 @@
       min-height: 44px;
       display: flex;
       align-items: center;
+    }
+    #toolbar select {
+      padding: 12px 14px;
+      font-size: 16px;
+      border-radius: 8px;
+      min-height: 44px;
+    }
+    #link-status {
+      font-size: 12px;
+      padding: 2px 2px 0;
+      background: transparent;
     }
     #scrubber-bar {
       padding: 6px 12px 8px;
@@ -294,7 +324,7 @@
 </style>
 </head>
 <body>
-<button id="mobile-menu-btn" class="ui-panel">⚙️ 設定</button>
+<button id="mobile-menu-btn" class="ui-panel" title="設定メニュー (M / Esc)">⚙️ 設定</button>
 
 <div id="toolbar" class="ui-panel">
   <div class="mobile-header">
@@ -1493,22 +1523,50 @@
   const mobileCloseBtn = document.getElementById('mobile-close-btn');
   const btnWakeLock    = document.getElementById('btn-wake-lock');
 
+  function closeDrawer() {
+    toolbar.classList.remove('open');
+    toolbar.classList.remove('mobile-open');
+    wake();
+  }
+
+  function openDrawer() {
+    toolbar.classList.add('open');
+    toolbar.classList.add('mobile-open');
+    wake();
+  }
+
+  function toggleDrawer() {
+    if (toolbar.classList.contains('open') || toolbar.classList.contains('mobile-open')) {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
+  }
+
   function closeMobileDrawer() {
     if (window.innerWidth <= 768) {
-      toolbar.classList.remove('mobile-open');
+      closeDrawer();
     }
   }
 
   mobileMenuBtn.addEventListener('click', e => {
     e.stopPropagation();
-    toolbar.classList.add('mobile-open');
-    wake();
+    toggleDrawer();
   });
 
   mobileCloseBtn.addEventListener('click', e => {
     e.stopPropagation();
-    toolbar.classList.remove('mobile-open');
-    wake();
+    closeDrawer();
+  });
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (toolbar.classList.contains('open') || toolbar.classList.contains('mobile-open')) {
+        closeDrawer();
+      }
+    } else if ((e.key === 'm' || e.key === 'M') && !['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) {
+      toggleDrawer();
+    }
   });
 
   const btnHourGrad  = document.getElementById('btn-theme-hourgrad');
@@ -1608,6 +1666,10 @@
   });
 
   canvas.addEventListener('click', e => {
+    if (toolbar.classList.contains('open') || toolbar.classList.contains('mobile-open')) {
+      closeDrawer();
+      return;
+    }
     if (mode === 'all8') {
       const isPortrait = W < H;
       const cols = isPortrait ? 2 : 4;
@@ -1693,7 +1755,9 @@
   function wake() {
     document.body.classList.remove('idle');
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => document.body.classList.add('idle'), 4000);
+    if (!toolbar.classList.contains('open') && !toolbar.classList.contains('mobile-open')) {
+      idleTimer = setTimeout(() => document.body.classList.add('idle'), 4000);
+    }
     if (wakeLockEnabled && !wakeLock) {
       requestWakeLock();
     }
