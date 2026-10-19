@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Pie Clock</title>
+<title>Pie Clock - Hour-Hand & Second-Ring Gradient Controls</title>
 <style>
   html, body {
     margin: 0;
@@ -24,6 +24,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
   }
   body.idle { cursor: none; }
+  body.idle .ui-panel { opacity: 0; pointer-events: none; }
   canvas {
     display: block;
     position: fixed;
@@ -31,95 +32,784 @@
     width: 100%;
     height: 100%;
   }
+  .ui-panel {
+    transition: opacity 0.4s ease;
+    z-index: 10;
+  }
   #toolbar {
     position: fixed;
     top: 10px;
-    right: 14px;
-    z-index: 10;
+    right: 12px;
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+    max-width: 98vw;
+    justify-content: flex-end;
+  }
+  .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    background: #18181c;
+    padding: 3px;
+    border: 1px solid #33333c;
   }
   #toolbar button {
-    background: #262626;
-    color: #dddddd;
-    border: none;
-    padding: 6px 11px;
+    background: #222226;
+    color: #cccccc;
+    border: 1px solid #3a3a42;
+    padding: 5px 10px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
   }
   #toolbar button.active {
-    background: #00b8ff;
+    background: #eeeeee;
     color: #111111;
+    border-color: #eeeeee;
+  }
+  #toolbar button.theme-active {
+    background: #38bdf8;
+    color: #111111;
+    border-color: #38bdf8;
+    font-weight: 700;
+  }
+  #toolbar button.sec-active {
+    background: #f59e0b;
+    color: #111111;
+    border-color: #f59e0b;
+    font-weight: 700;
+  }
+  #scrubber-bar {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(860px, 94vw);
+    background: #18181c;
+    border: 1px solid #33333a;
+    padding: 8px 16px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #dddddd;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .strip-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #888892;
+    padding: 0 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .scrubber-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #sky-strip {
+    height: 10px;
+    width: 100%;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+  #time-slider {
+    flex: 1;
+    cursor: pointer;
+    accent-color: #ffffff;
+    margin: 0;
+  }
+  #scrubber-time {
+    min-width: 66px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 </style>
 </head>
 <body>
-<div id="toolbar">
-  <button id="btn-840" class="active">8:40:00 から検証</button>
-  <button id="btn-1220">12:20:45 から検証</button>
-  <button id="btn-live">現在時刻で動作</button>
-  <button id="btn-align">③目印: 時の線に右端揃え</button>
-  <button id="btn-color">色を再抽選</button>
-  <button id="btn-bg">背景: ダーク(#111)</button>
+<div id="toolbar" class="ui-panel">
+  <!-- カラーテーマ切り替え -->
+  <div class="btn-group">
+    <button id="btn-theme-hourgrad" class="theme-active">① 短針だけグラデ 🌅</button>
+    <button id="btn-theme-sky24h">② 短針・長針とも単色(24h空色) 🌤️</button>
+    <button id="btn-theme-allgrad">③ 短針・長針ともグラデ 🌈</button>
+    <button id="btn-theme-classic">④ 従来ソリッド版 🎨</button>
+    <button id="btn-grad-dir">短針グラデ方向: 天頂➔地平線</button>
+  </div>
+  <!-- 秒リングのグラデーション／ソリッド切り替え ＆ 表示モード -->
+  <div class="btn-group">
+    <button id="btn-sec-grad" class="sec-active">秒リング: グラデーション ✨</button>
+    <button id="btn-all8" class="active">8フェーズ一覧</button>
+    <button id="btn-compare">昼(12:20) vs 夕陽(17:05)</button>
+    <button id="btn-live">現在時刻</button>
+    <button id="btn-timelapse">24h早送り</button>
+    <button id="btn-hour-mode">短針: 滑らか</button>
+  </div>
 </div>
+
+<div id="scrubber-bar" class="ui-panel">
+  <div class="strip-labels">
+    <span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span>
+    <span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span><span>24:00</span>
+  </div>
+  <div id="sky-strip" title="短針（空の色）の24時間連続グラデーション推移"></div>
+  <div class="scrubber-row">
+    <span>短針(空の色) 24h連続推移</span>
+    <input id="time-slider" type="range" min="0" max="86399" step="1" value="61500">
+    <span id="scrubber-time">17:05:00</span>
+  </div>
+</div>
+
 <canvas id="clock"></canvas>
 <script>
 (() => {
   'use strict';
   const TAU = Math.PI * 2;
-  const START = -Math.PI / 2; // 12時の位置
-  const RING_RATIO = 0.15;
+  const START = -Math.PI / 2; // 12時の位置 (真上)
+  const RING_RATIO = 0.16;
 
   const canvas = document.getElementById('clock');
   const ctx = canvas.getContext('2d', { alpha: false });
 
-  /* ---------- 状態管理 ---------- */
-  let darkBg = true;
-  let activePattern = null;   // null = 4分割比較, 0〜3 = 単体拡大
-  let centerMarker = false;   // false = 時の線に端を揃える(画像1準拠), true = 時の線の中央に配置
-  let simStart = { h: 8, m: 40, s: 0, t0: performance.now() };
-  let useMockupColors = false;
+  /* ==========================================================================
+   * 8フェーズのラベル定義（表示用）
+   * ========================================================================== */
+  const PHASE_LABELS = [
+    { index: 1, range: '00:00 - 03:00', name: '深夜 / ダーク・ディープグレー',       sampleSec: 1 * 3600 + 35 * 60 + 45 },
+    { index: 2, range: '03:00 - 06:00', name: '未明〜明け方 / ダスティ・スモーキー',   sampleSec: 4 * 3600 + 45 * 60 + 45 },
+    { index: 3, range: '06:00 - 09:00', name: '朝方 / ペール・パステル',             sampleSec: 7 * 3600 + 10 * 60 + 45 },
+    { index: 4, range: '09:00 - 12:00', name: '午前 / ブライト・フレッシュ',         sampleSec: 10 * 3600 + 20 * 60 + 45 },
+    { index: 5, range: '12:00 - 15:00', name: '昼下がり / ビビッド・サン',           sampleSec: 13 * 3600 + 35 * 60 + 45 },
+    { index: 6, range: '15:00 - 18:00', name: '夕方 / サンセット（夕陽〜茜空）',     sampleSec: 16 * 3600 + 50 * 60 + 45 },
+    { index: 7, range: '18:00 - 21:00', name: '宵 / マジックアワー〜トワイライト',   sampleSec: 18 * 3600 + 55 * 60 + 45 },
+    { index: 8, range: '21:00 - 24:00', name: '夜 / ナイトダーク（夜空）',           sampleSec: 22 * 3600 + 20 * 60 + 45 },
+  ];
 
-  const MOCKUP_PALETTE_A = ['#8fd3f4', '#009933', '#005b82', '#8c0044'];
-  const MOCKUP_PALETTE_B = ['#8fd3f4', '#009933', '#fff000', '#e60012'];
+  /* ==========================================================================
+   * モード①（短針だけグラデ）＆ モード③（短針・長針ともグラデ）用：
+   * 24時間連続キーフレーム定義（SKY_GRADIENT_KEYFRAMES）
+   * ========================================================================== */
+  const SKY_GRADIENT_KEYFRAMES = [
+    // 00:00 深夜
+    {
+      hour: 0.0,
+      skyTop:     { h: 245, s: 32, l: 9  },
+      skyMid:     { h: 238, s: 26, l: 15 },
+      skyHorizon: { h: 225, s: 24, l: 23 },
+      mainStart:  { h: 232, s: 26, l: 42 },
+      mainEnd:    { h: 245, s: 24, l: 34 },
+      accStart:   { h: 196, s: 45, l: 55 }, // 秒グラデ始点(12時位置)
+      accEnd:     { h: 240, s: 38, l: 34 }, // 秒グラデ終点(秒針先端)
+      ringBg:     { h: 235, s: 18, l: 9  },
+    },
+    // 02:00 深夜ディープネイビー
+    {
+      hour: 2.0,
+      skyTop:     { h: 248, s: 34, l: 10 },
+      skyMid:     { h: 242, s: 28, l: 16 },
+      skyHorizon: { h: 230, s: 26, l: 25 },
+      mainStart:  { h: 238, s: 28, l: 44 },
+      mainEnd:    { h: 250, s: 26, l: 36 },
+      accStart:   { h: 202, s: 46, l: 56 },
+      accEnd:     { h: 248, s: 40, l: 36 },
+      ringBg:     { h: 240, s: 20, l: 10 },
+    },
+    // 04:30 未明〜明け方
+    {
+      hour: 4.5,
+      skyTop:     { h: 242, s: 38, l: 20 },
+      skyMid:     { h: 275, s: 38, l: 31 },
+      skyHorizon: { h: 328, s: 48, l: 44 },
+      mainStart:  { h: 315, s: 48, l: 62 },
+      mainEnd:    { h: 285, s: 42, l: 52 },
+      accStart:   { h: 340, s: 66, l: 70 },
+      accEnd:     { h: 275, s: 48, l: 48 },
+      ringBg:     { h: 252, s: 28, l: 16 },
+    },
+    // 06:15 夜明け〜朝方
+    {
+      hour: 6.25,
+      skyTop:     { h: 202, s: 100, l: 64 },
+      skyMid:     { h: 186, s: 96,  l: 71 },
+      skyHorizon: { h: 348, s: 100, l: 80 },
+      mainStart:  { h: 52,  s: 100, l: 82 },
+      mainEnd:    { h: 36,  s: 100, l: 76 },
+      accStart:   { h: 336, s: 100, l: 78 },
+      accEnd:     { h: 42,  s: 100, l: 76 },
+      ringBg:     { h: 166, s: 96,  l: 64 },
+    },
+    // 07:45 朝方ピーク（パステル）
+    {
+      hour: 7.75,
+      skyTop:     { h: 204, s: 100, l: 62 },
+      skyMid:     { h: 188, s: 100, l: 70 },
+      skyHorizon: { h: 168, s: 96,  l: 76 },
+      mainStart:  { h: 52,  s: 100, l: 81 },
+      mainEnd:    { h: 42,  s: 100, l: 75 },
+      accStart:   { h: 338, s: 100, l: 78 },
+      accEnd:     { h: 24,  s: 100, l: 74 },
+      ringBg:     { h: 168, s: 100, l: 64 },
+    },
+    // 10:15 午前ピーク（ブライト・フレッシュ）
+    {
+      hour: 10.25,
+      skyTop:     { h: 216, s: 100, l: 49 },
+      skyMid:     { h: 198, s: 100, l: 55 },
+      skyHorizon: { h: 176, s: 100, l: 62 },
+      mainStart:  { h: 148, s: 100, l: 52 },
+      mainEnd:    { h: 164, s: 100, l: 48 },
+      accStart:   { h: 52,  s: 100, l: 55 },
+      accEnd:     { h: 158, s: 100, l: 50 },
+      ringBg:     { h: 190, s: 100, l: 46 },
+    },
+    // 12:15 正午（ビビッド・サン）
+    {
+      hour: 12.25,
+      skyTop:     { h: 226, s: 100, l: 46 },
+      skyMid:     { h: 212, s: 100, l: 52 },
+      skyHorizon: { h: 194, s: 100, l: 58 },
+      mainStart:  { h: 52,  s: 100, l: 54 },
+      mainEnd:    { h: 40,  s: 100, l: 52 },
+      accStart:   { h: 348, s: 100, l: 54 },
+      accEnd:     { h: 44,  s: 100, l: 54 },
+      ringBg:     { h: 174, s: 100, l: 45 },
+    },
+    // 14:00 昼下がり
+    {
+      hour: 14.0,
+      skyTop:     { h: 222, s: 100, l: 46 },
+      skyMid:     { h: 208, s: 100, l: 52 },
+      skyHorizon: { h: 190, s: 100, l: 58 },
+      mainStart:  { h: 49,  s: 100, l: 54 },
+      mainEnd:    { h: 38,  s: 100, l: 52 },
+      accStart:   { h: 352, s: 100, l: 54 },
+      accEnd:     { h: 42,  s: 100, l: 54 },
+      ringBg:     { h: 180, s: 100, l: 44 },
+    },
+    // 15:25 午後（まだ爽やかな青空）
+    {
+      hour: 15.42,
+      skyTop:     { h: 214, s: 94,  l: 46 },
+      skyMid:     { h: 200, s: 90,  l: 52 },
+      skyHorizon: { h: 184, s: 82,  l: 58 },
+      mainStart:  { h: 46,  s: 100, l: 56 },
+      mainEnd:    { h: 34,  s: 100, l: 52 },
+      accStart:   { h: 46,  s: 100, l: 56 },
+      accEnd:     { h: 10,  s: 96,  l: 54 },
+      ringBg:     { h: 194, s: 86,  l: 40 },
+    },
+    // 16:00 西日のゴールデンアンバー
+    {
+      hour: 16.0,
+      warmBridgeFromPrev: true,
+      skyTop:     { h: 28,  s: 84,  l: 40 },
+      skyMid:     { h: 30,  s: 90,  l: 48 },
+      skyHorizon: { h: 42,  s: 96,  l: 58 },
+      mainStart:  { h: 48,  s: 100, l: 68 },
+      mainEnd:    { h: 34,  s: 100, l: 58 },
+      accStart:   { h: 50,  s: 100, l: 62 },
+      accEnd:     { h: 14,  s: 96,  l: 54 },
+      ringBg:     { h: 22,  s: 76,  l: 28 },
+    },
+    // 16:45 夕陽ピーク①（オレンジ〜朱赤）
+    {
+      hour: 16.75,
+      skyTop:     { h: 8,   s: 88,  l: 34 },
+      skyMid:     { h: 18,  s: 94,  l: 44 },
+      skyHorizon: { h: 36,  s: 100, l: 54 },
+      mainStart:  { h: 44,  s: 100, l: 64 },
+      mainEnd:    { h: 26,  s: 100, l: 56 },
+      accStart:   { h: 50,  s: 100, l: 62 },
+      accEnd:     { h: 6,   s: 96,  l: 50 },
+      ringBg:     { h: 6,   s: 80,  l: 22 },
+    },
+    // 17:30 夕陽ピーク②（バーミリオン〜茜色）
+    {
+      hour: 17.5,
+      skyTop:     { h: 350, s: 84,  l: 28 },
+      skyMid:     { h: 6,   s: 90,  l: 38 },
+      skyHorizon: { h: 24,  s: 96,  l: 48 },
+      mainStart:  { h: 34,  s: 100, l: 60 },
+      mainEnd:    { h: 16,  s: 96,  l: 52 },
+      accStart:   { h: 44,  s: 100, l: 60 },
+      accEnd:     { h: 352, s: 92,  l: 48 },
+      ringBg:     { h: 348, s: 78,  l: 18 },
+    },
+    // 18:15 日没直後の茜色
+    {
+      hour: 18.25,
+      skyTop:     { h: 326, s: 74,  l: 22 },
+      skyMid:     { h: 348, s: 84,  l: 31 },
+      skyHorizon: { h: 14,  s: 92,  l: 44 },
+      mainStart:  { h: 20,  s: 94,  l: 58 },
+      mainEnd:    { h: 354, s: 88,  l: 50 },
+      accStart:   { h: 34,  s: 96,  l: 58 },
+      accEnd:     { h: 338, s: 86,  l: 46 },
+      ringBg:     { h: 324, s: 70,  l: 15 },
+    },
+    // 19:00 マジックアワー（紅紫〜コーラルローズ）
+    {
+      hour: 19.0,
+      skyTop:     { h: 288, s: 64,  l: 18 },
+      skyMid:     { h: 322, s: 70,  l: 26 },
+      skyHorizon: { h: 350, s: 82,  l: 38 },
+      mainStart:  { h: 352, s: 80,  l: 54 },
+      mainEnd:    { h: 320, s: 68,  l: 46 },
+      accStart:   { h: 18,  s: 88,  l: 56 },
+      accEnd:     { h: 318, s: 72,  l: 44 },
+      ringBg:     { h: 292, s: 60,  l: 14 },
+    },
+    // 19:50 宵のトワイライト
+    {
+      hour: 19.83,
+      skyTop:     { h: 254, s: 54,  l: 15 },
+      skyMid:     { h: 284, s: 58,  l: 22 },
+      skyHorizon: { h: 320, s: 64,  l: 32 },
+      mainStart:  { h: 322, s: 60,  l: 48 },
+      mainEnd:    { h: 288, s: 54,  l: 42 },
+      accStart:   { h: 345, s: 68,  l: 54 },
+      accEnd:     { h: 285, s: 56,  l: 40 },
+      ringBg:     { h: 260, s: 48,  l: 12 },
+    },
+    // 20:45 宵闇の群青
+    {
+      hour: 20.75,
+      skyTop:     { h: 242, s: 48,  l: 12 },
+      skyMid:     { h: 254, s: 50,  l: 19 },
+      skyHorizon: { h: 278, s: 52,  l: 27 },
+      mainStart:  { h: 275, s: 50,  l: 44 },
+      mainEnd:    { h: 248, s: 46,  l: 38 },
+      accStart:   { h: 315, s: 54,  l: 50 },
+      accEnd:     { h: 245, s: 48,  l: 36 },
+      ringBg:     { h: 238, s: 42,  l: 11 },
+    },
+    // 22:00 夜空
+    {
+      hour: 22.0,
+      skyTop:     { h: 242, s: 42,  l: 10 },
+      skyMid:     { h: 234, s: 40,  l: 16 },
+      skyHorizon: { h: 220, s: 42,  l: 24 },
+      mainStart:  { h: 228, s: 46,  l: 40 },
+      mainEnd:    { h: 215, s: 42,  l: 34 },
+      accStart:   { h: 192, s: 58,  l: 50 },
+      accEnd:     { h: 232, s: 48,  l: 34 },
+      ringBg:     { h: 228, s: 30,  l: 9  },
+    },
+    // 24:00 (00:00と完全一致)
+    {
+      hour: 24.0,
+      skyTop:     { h: 245, s: 32,  l: 9  },
+      skyMid:     { h: 238, s: 26,  l: 15 },
+      skyHorizon: { h: 225, s: 24,  l: 23 },
+      mainStart:  { h: 232, s: 26,  l: 42 },
+      mainEnd:    { h: 245, s: 24,  l: 34 },
+      accStart:   { h: 196, s: 45,  l: 55 },
+      accEnd:     { h: 240, s: 38,  l: 34 },
+      ringBg:     { h: 235, s: 18,  l: 9  },
+    }
+  ];
 
-  /* ---------- カラー生成 ---------- */
-  function hsl2hex(h, s, l) {
-    h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+  /* ==========================================================================
+   * モード②: 短針・長針とも単色（短針＝24時間「空の色」連続変化版 SKY_24H_KEYFRAMES）
+   * ========================================================================== */
+  const SKY_24H_KEYFRAMES = [
+    {
+      hour: 0.0,
+      bg: { h: 240, s: 18, l: 13 }, main: { h: 232, s: 24, l: 38 },
+      accent: { h: 208, s: 30, l: 45 }, accEnd: { h: 242, s: 34, l: 32 }, ringBg: { h: 230, s: 15, l: 9 },
+    },
+    {
+      hour: 2.0,
+      bg: { h: 248, s: 20, l: 15 }, main: { h: 240, s: 26, l: 41 },
+      accent: { h: 215, s: 32, l: 47 }, accEnd: { h: 250, s: 36, l: 34 }, ringBg: { h: 238, s: 16, l: 10 },
+    },
+    {
+      hour: 4.5,
+      bg: { h: 262, s: 32, l: 27 }, main: { h: 295, s: 42, l: 58 },
+      accent: { h: 335, s: 56, l: 68 }, accEnd: { h: 275, s: 44, l: 46 }, ringBg: { h: 250, s: 25, l: 17 },
+    },
+    {
+      hour: 6.25,
+      bg: { h: 192, s: 96, l: 70 }, main: { h: 48, s: 100, l: 82 },
+      accent: { h: 338, s: 100, l: 78 }, accEnd: { h: 38, s: 100, l: 76 }, ringBg: { h: 164, s: 96, l: 66 },
+    },
+    {
+      hour: 7.75,
+      bg: { h: 198, s: 100, l: 67 }, main: { h: 54, s: 100, l: 80 },
+      accent: { h: 344, s: 100, l: 76 }, accEnd: { h: 24, s: 100, l: 74 }, ringBg: { h: 170, s: 100, l: 64 },
+    },
+    {
+      hour: 10.25,
+      bg: { h: 206, s: 100, l: 54 }, main: { h: 150, s: 100, l: 52 },
+      accent: { h: 50, s: 100, l: 54 }, accEnd: { h: 160, s: 100, l: 50 }, ringBg: { h: 188, s: 100, l: 49 },
+    },
+    {
+      hour: 12.25,
+      bg: { h: 218, s: 100, l: 50 }, main: { h: 52, s: 100, l: 54 },
+      accent: { h: 352, s: 100, l: 54 }, accEnd: { h: 42, s: 100, l: 54 }, ringBg: { h: 172, s: 100, l: 46 },
+    },
+    {
+      hour: 14.0,
+      bg: { h: 215, s: 100, l: 49 }, main: { h: 48, s: 100, l: 54 },
+      accent: { h: 356, s: 100, l: 53 }, accEnd: { h: 40, s: 100, l: 54 }, ringBg: { h: 178, s: 100, l: 45 },
+    },
+    {
+      hour: 15.42,
+      bg: { h: 208, s: 90, l: 50 }, main: { h: 45, s: 100, l: 56 },
+      accent: { h: 44, s: 100, l: 56 }, accEnd: { h: 10, s: 96, l: 54 }, ringBg: { h: 192, s: 88, l: 42 },
+    },
+    {
+      hour: 16.0,
+      warmBridgeFromPrev: true,
+      bg: { h: 28, s: 88, l: 48 }, main: { h: 46, s: 100, l: 68 },
+      accent: { h: 50, s: 100, l: 62 }, accEnd: { h: 12, s: 96, l: 52 }, ringBg: { h: 20, s: 76, l: 30 },
+    },
+    {
+      hour: 16.75,
+      bg: { h: 16, s: 92, l: 42 }, main: { h: 40, s: 100, l: 62 },
+      accent: { h: 48, s: 100, l: 60 }, accEnd: { h: 4, s: 96, l: 50 }, ringBg: { h: 4, s: 80, l: 24 },
+    },
+    {
+      hour: 17.5,
+      bg: { h: 4, s: 88, l: 35 }, main: { h: 30, s: 98, l: 58 },
+      accent: { h: 42, s: 98, l: 58 }, accEnd: { h: 350, s: 92, l: 48 }, ringBg: { h: 348, s: 78, l: 20 },
+    },
+    {
+      hour: 18.25,
+      bg: { h: 346, s: 82, l: 29 }, main: { h: 16, s: 92, l: 56 },
+      accent: { h: 32, s: 94, l: 56 }, accEnd: { h: 336, s: 86, l: 46 }, ringBg: { h: 326, s: 72, l: 17 },
+    },
+    {
+      hour: 19.0,
+      bg: { h: 322, s: 68, l: 24 }, main: { h: 352, s: 78, l: 52 },
+      accent: { h: 16, s: 86, l: 56 }, accEnd: { h: 316, s: 72, l: 44 }, ringBg: { h: 295, s: 62, l: 15 },
+    },
+    {
+      hour: 19.83,
+      bg: { h: 284, s: 56, l: 20 }, main: { h: 320, s: 58, l: 47 },
+      accent: { h: 342, s: 64, l: 52 }, accEnd: { h: 285, s: 56, l: 40 }, ringBg: { h: 262, s: 50, l: 13 },
+    },
+    {
+      hour: 20.75,
+      bg: { h: 252, s: 48, l: 18 }, main: { h: 275, s: 48, l: 43 },
+      accent: { h: 310, s: 52, l: 48 }, accEnd: { h: 245, s: 48, l: 36 }, ringBg: { h: 238, s: 44, l: 12 },
+    },
+    {
+      hour: 22.0,
+      bg: { h: 238, s: 38, l: 15 }, main: { h: 235, s: 44, l: 39 },
+      accent: { h: 195, s: 54, l: 48 }, accEnd: { h: 232, s: 46, l: 34 }, ringBg: { h: 225, s: 30, l: 10 },
+    },
+    {
+      hour: 24.0,
+      bg: { h: 240, s: 18, l: 13 }, main: { h: 232, s: 24, l: 38 },
+      accent: { h: 208, s: 30, l: 45 }, accEnd: { h: 242, s: 34, l: 32 }, ringBg: { h: 230, s: 15, l: 9 },
+    }
+  ];
+
+  /* ==========================================================================
+   * モード④: 従来ソリッド版（index_classic.html と同一）
+   * ========================================================================== */
+  const CLASSIC_PHASES = [
+    {
+      index: 1, range: '00:00 - 03:00', name: '深夜 / ダーク・ディープグレー',
+      main:   { hStart: 240, hEnd: 260, s: 22, l: 38 },
+      bg:     { hStart: 250, hEnd: 270, s: 16, l: 15 },
+      accent: { hStart: 210, hEnd: 230, s: 28, l: 45 },
+      ringBg: { hStart: 230, hEnd: 245, s: 14, l: 10 },
+    },
+    {
+      index: 2, range: '03:00 - 06:00', name: '未明〜明け方 / ダスティ・スモーキー',
+      main:   { hStart: 220, hEnd: 280, s: 35, l: 56 },
+      bg:     { hStart: 200, hEnd: 230, s: 28, l: 26 },
+      accent: { hStart: 300, hEnd: 335, s: 40, l: 62 },
+      ringBg: { hStart: 245, hEnd: 270, s: 24, l: 18 },
+    },
+    {
+      index: 3, range: '06:00 - 09:00', name: '朝方 / ペール・パステル',
+      main:   { hStart: 50,  hEnd: 58,  s: 100, l: 80 },
+      bg:     { hStart: 210, hEnd: 226, s: 100, l: 66 },
+      accent: { hStart: 335, hEnd: 352, s: 100, l: 76 },
+      ringBg: { hStart: 162, hEnd: 176, s: 100, l: 66 },
+    },
+    {
+      index: 4, range: '09:00 - 12:00', name: '午前 / ブライト・フレッシュ',
+      main:   { hStart: 145, hEnd: 162, s: 100, l: 52 },
+      bg:     { hStart: 218, hEnd: 230, s: 100, l: 52 },
+      accent: { hStart: 48,  hEnd: 56,  s: 100, l: 54 },
+      ringBg: { hStart: 186, hEnd: 198, s: 100, l: 50 },
+    },
+    {
+      index: 5, range: '12:00 - 15:00', name: '昼下がり / ビビッド・サン（真昼の太陽）',
+      main:   { hStart: 50,  hEnd: 56,  s: 100, l: 54 },
+      bg:     { hStart: 348, hEnd: 368, s: 100, l: 52 },
+      accent: { hStart: 160, hEnd: 178, s: 100, l: 50 },
+      ringBg: { hStart: 222, hEnd: 236, s: 100, l: 52 },
+    },
+    {
+      index: 6, range: '15:00 - 18:00', name: '夕方 / ウォーム・ディープ（沈む夕陽）',
+      main:   { hStart: 378, hEnd: 350, s: 94,  l: 52 },
+      bg:     { hStart: 320, hEnd: 342, s: 84,  l: 22 },
+      accent: { hStart: 35,  hEnd: 46,  s: 96,  l: 56 },
+      ringBg: { hStart: 282, hEnd: 308, s: 76,  l: 15 },
+    },
+    {
+      index: 7, range: '18:00 - 21:00', name: '宵 / トワイライト・ダル',
+      main:   { hStart: 280, hEnd: 330, s: 56,  l: 46 },
+      bg:     { hStart: 238, hEnd: 265, s: 50,  l: 20 },
+      accent: { hStart: 335, hEnd: 360, s: 62,  l: 52 },
+      ringBg: { hStart: 220, hEnd: 242, s: 44,  l: 13 },
+    },
+    {
+      index: 8, range: '21:00 - 24:00', name: '夜 / ナイトダーク',
+      main:   { hStart: 225, hEnd: 250, s: 44,  l: 38 },
+      bg:     { hStart: 235, hEnd: 255, s: 35,  l: 15 },
+      accent: { hStart: 195, hEnd: 215, s: 50,  l: 44 },
+      ringBg: { hStart: 220, hEnd: 238, s: 28,  l: 10 },
+    }
+  ];
+
+  // デフォルト設定
+  let themeMode = 'hourGrad'; // 'hourGrad' | 'sky24h' | 'allGrad' | 'classic'
+  let gradStyle = 'vertical'; // 'vertical' | 'conic' | 'radial'
+  let secGradOn = true;       // 秒リングのグラデーション ON/OFF（ボタンでいつでも切り替え可能）
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function cosInterp(t) {
+    return (1 - Math.cos(t * Math.PI)) * 0.5;
+  }
+
+  function lerpHueShort(h1, h2, t) {
+    const diff = ((((h2 - h1) % 360) + 540) % 360) - 180;
+    return (((h1 + diff * t) % 360) + 360) % 360;
+  }
+
+  function hsl2rgb(h, s, l) {
+    h = ((h % 360) + 360) % 360;
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
     const k = n => (n + h / 30) % 12;
     const a = s * Math.min(l, 1 - l);
     const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    const x = v => Math.round(v * 255).toString(16).padStart(2, '0');
-    return '#' + x(f(0)) + x(f(8)) + x(f(4));
+    return [f(0) * 255, f(8) * 255, f(4) * 255];
   }
 
-  // [0:秒明色, 1:秒暗色, 2:長針明色, 3:短針/内円暗色, 4:時マーカー用ビビッド]
-  let palette = [];
-
-  function newPalette() {
-    const base = Math.random() * 360;
-    const hues = [0, 1, 2, 3, 4].map(i => base + i * 72 + (Math.random() - 0.5) * 18);
-    for (let i = hues.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [hues[i], hues[j]] = [hues[j], hues[i]];
+  function rgb2hsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h *= 60;
     }
-    let next;
-    do {
-      next = [
-        hsl2hex(hues[0], 92 + Math.random() * 8, 56 + Math.random() * 8), // 0: 秒（明色）
-        hsl2hex(hues[1], 78 + Math.random() * 14, 24 + Math.random() * 5), // 1: 秒（低明度）
-        hsl2hex(hues[2], 92 + Math.random() * 8, 58 + Math.random() * 8), // 2: 長針（明色）
-        hsl2hex(hues[3], 82 + Math.random() * 14, 26 + Math.random() * 6), // 3: 短針/内円（低明度）
-        hsl2hex(hues[4], 90 + Math.random() * 10, 48 + Math.random() * 8), // 4: 時マーカー用ビビッド
-      ];
-    } while (new Set(next).size !== 5 || next.some(c => palette.includes(c)));
-    palette = next;
+    return { h, s: s * 100, l: l * 100 };
   }
-  newPalette();
 
-  /* ---------- リサイズ ---------- */
+  function hsl2hex(h, s, l) {
+    const [r, g, b] = hsl2rgb(h, s, l);
+    const x = v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
+    return '#' + x(r) + x(g) + x(b);
+  }
+
+  function lerpWarmSunlightBridge(a, b, t) {
+    const u = cosInterp(t);
+    const [r1, g1, b1] = hsl2rgb(a.h, a.s, a.l);
+    const [r2, g2, b2] = hsl2rgb(b.h, b.s, b.l);
+    const sunBoost = Math.sin(u * Math.PI);
+    const r = lerp(r1, r2, u) + 75 * sunBoost;
+    const g = lerp(g1, g2, u) + 42 * sunBoost;
+    const bl = lerp(b1, b2, u) - 15 * sunBoost;
+    const hsl = rgb2hsl(
+      Math.max(0, Math.min(255, r)),
+      Math.max(0, Math.min(255, g)),
+      Math.max(0, Math.min(255, bl))
+    );
+    const s = Math.max(hsl.s, lerp(a.s, b.s, u) * 0.82);
+    const l = lerp(a.l, b.l, u) + 4 * sunBoost;
+    return { h: hsl.h, s, l, hex: hsl2hex(hsl.h, s, l) };
+  }
+
+  function lerpHSLNode(a, b, t, useWarmBridge = false) {
+    if (useWarmBridge) {
+      return lerpWarmSunlightBridge(a, b, t);
+    }
+    const u = cosInterp(t);
+    const h = lerpHueShort(a.h, b.h, u);
+    const s = lerp(a.s, b.s, u);
+    const l = lerp(a.l, b.l, u);
+    return { h, s, l, hex: hsl2hex(h, s, l) };
+  }
+
+  function findKeyframePair(keyframes, hour24) {
+    for (let i = 0; i < keyframes.length - 1; i++) {
+      const curr = keyframes[i];
+      const next = keyframes[i + 1];
+      if (hour24 >= curr.hour && hour24 <= next.hour) {
+        const span = next.hour - curr.hour;
+        const localT = span > 0 ? (hour24 - curr.hour) / span : 0;
+        return { curr, next, localT };
+      }
+    }
+    const last = keyframes[keyframes.length - 2];
+    const end  = keyframes[keyframes.length - 1];
+    return { curr: last, next: end, localT: 1 };
+  }
+
+  function interpClassicTrack(currTrack, nextTrack, localT) {
+    let h, s, l;
+    if (localT < 0.80) {
+      const u = cosInterp(localT / 0.80);
+      h = ((lerp(currTrack.hStart, currTrack.hEnd, u) % 360) + 360) % 360;
+      s = currTrack.s;
+      l = currTrack.l;
+    } else {
+      const b = cosInterp((localT - 0.80) / 0.20);
+      const endH = ((currTrack.hEnd % 360) + 360) % 360;
+      const nextStartH = ((nextTrack.hStart % 360) + 360) % 360;
+      h = lerpHueShort(endH, nextStartH, b);
+      s = lerp(currTrack.s, nextTrack.s, b);
+      l = lerp(currTrack.l, nextTrack.l, b);
+    }
+    return { h, s, l, hex: hsl2hex(h, s, l) };
+  }
+
+  function getTimeColor(date) {
+    const totalSeconds =
+      date.getHours() * 3600 +
+      date.getMinutes() * 60 +
+      date.getSeconds() +
+      date.getMilliseconds() / 1000;
+
+    const dayProgress = totalSeconds / 86400;
+    const hour24 = dayProgress * 24;
+    const exactPhase = dayProgress * 8;
+    const idx = Math.floor(exactPhase) % 8;
+    const nextIdx = (idx + 1) % 8;
+    const localT = exactPhase - Math.floor(exactPhase);
+    const phaseMeta = PHASE_LABELS[idx];
+
+    if (themeMode === 'hourGrad' || themeMode === 'allGrad') {
+      const { curr, next, localT: kfT } = findKeyframePair(SKY_GRADIENT_KEYFRAMES, hour24);
+      const wb = Boolean(next.warmBridgeFromPrev);
+
+      const skyTop     = lerpHSLNode(curr.skyTop,     next.skyTop,     kfT, wb);
+      const skyMid     = lerpHSLNode(curr.skyMid,     next.skyMid,     kfT, wb);
+      const skyHorizon = lerpHSLNode(curr.skyHorizon, next.skyHorizon, kfT, wb);
+      const mainStart  = lerpHSLNode(curr.mainStart,  next.mainStart,  kfT, false);
+      const mainEnd    = lerpHSLNode(curr.mainEnd,    next.mainEnd,    kfT, false);
+      const accStart   = lerpHSLNode(curr.accStart,   next.accStart,   kfT, false);
+      const accEnd     = lerpHSLNode(curr.accEnd,     next.accEnd,     kfT, false);
+      const ringBg     = lerpHSLNode(curr.ringBg,     next.ringBg,     kfT, wb);
+
+      return {
+        gradMode: themeMode,
+        skyTop: skyTop.hex,
+        skyMid: skyMid.hex,
+        skyHorizon: skyHorizon.hex,
+        mainStart: mainStart.hex,
+        mainEnd: mainEnd.hex,
+        accStart: accStart.hex,
+        accEnd: accEnd.hex,
+        mainColor: mainStart.hex,
+        backgroundColor: skyMid.hex,
+        accentColor: accStart.hex,
+        ringBgColor: ringBg.hex,
+        screenBg: '#111111',
+        dayProgress,
+        phase: phaseMeta,
+        hsl: {
+          h: Math.round(skyMid.h),
+          s: Math.round(skyMid.s),
+          l: Math.round(skyMid.l)
+        }
+      };
+    } else if (themeMode === 'sky24h') {
+      const { curr, next, localT: kfT } = findKeyframePair(SKY_24H_KEYFRAMES, hour24);
+      const wb = Boolean(next.warmBridgeFromPrev);
+
+      const bg     = lerpHSLNode(curr.bg,     next.bg,     kfT, wb);
+      const main   = lerpHSLNode(curr.main,   next.main,   kfT, false);
+      const accent = lerpHSLNode(curr.accent, next.accent, kfT, false);
+      const accEnd = lerpHSLNode(curr.accEnd, next.accEnd, kfT, false);
+      const ringBg = lerpHSLNode(curr.ringBg, next.ringBg, kfT, wb);
+
+      return {
+        gradMode: 'none',
+        mainColor: main.hex,
+        backgroundColor: bg.hex,
+        accentColor: accent.hex,
+        accStart: accent.hex,
+        accEnd: accEnd.hex,
+        ringBgColor: ringBg.hex,
+        screenBg: '#111111',
+        dayProgress,
+        phase: phaseMeta,
+        hsl: {
+          h: Math.round(bg.h),
+          s: Math.round(bg.s),
+          l: Math.round(bg.l)
+        }
+      };
+    } else {
+      const curr = CLASSIC_PHASES[idx];
+      const next = CLASSIC_PHASES[nextIdx];
+
+      const main   = interpClassicTrack(curr.main,   next.main,   localT);
+      const accent = interpClassicTrack(curr.accent, next.accent, localT);
+      const bg     = interpClassicTrack(curr.bg,     next.bg,     localT);
+      const ringBg = interpClassicTrack(curr.ringBg, next.ringBg, localT);
+      const accEndHex = hsl2hex(accent.h + 28, accent.s, Math.max(24, accent.l - 12));
+
+      return {
+        gradMode: 'none',
+        mainColor: main.hex,
+        backgroundColor: bg.hex,
+        accentColor: accent.hex,
+        accStart: accent.hex,
+        accEnd: accEndHex,
+        ringBgColor: ringBg.hex,
+        screenBg: '#111111',
+        dayProgress,
+        phase: curr,
+        hsl: {
+          h: Math.round(bg.h),
+          s: Math.round(bg.s),
+          l: Math.round(bg.l)
+        }
+      };
+    }
+  }
+
+  const skyStrip = document.getElementById('sky-strip');
+  function updateSkyStrip() {
+    const stops = [];
+    const steps = 96;
+    for (let i = 0; i <= steps; i++) {
+      const sec = (i / steps) * 86399;
+      const d = makeDateFromSeconds(sec);
+      const c = getTimeColor(d);
+      const pct = ((i / steps) * 100).toFixed(2);
+      stops.push(`${c.backgroundColor} ${pct}%`);
+    }
+    skyStrip.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+  }
+
+  /* ==========================================================================
+   * 2. 時計描画ロジック
+   *    - 外周秒リング：secGradOn に応じて「円周グラデーション」と「フラット単色」を切り替え
+   *    - 短針（ベース面）：hourGrad / allGrad では空グラデーション、sky24h / classic では単色
+   *    - 長針（ウェッジ）：allGrad ではグラデーション、それ以外ではフラット単色
+   * ========================================================================== */
   let W = 0, H = 0, dpr = 1;
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -131,17 +821,16 @@
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', resize);
 
-  /* ---------- 基本図形 ---------- */
-  function circle(cx, cy, r, color) {
-    ctx.fillStyle = color;
+  function circle(cx, cy, r, fillStyle) {
+    ctx.fillStyle = fillStyle;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, TAU);
     ctx.fill();
   }
 
-  function sector(cx, cy, r, startAngle, endAngle, color) {
+  function sector(cx, cy, r, startAngle, endAngle, fillStyle) {
     if (endAngle <= startAngle) return;
-    ctx.fillStyle = color;
+    ctx.fillStyle = fillStyle;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, startAngle, endAngle);
@@ -149,236 +838,382 @@
     ctx.fill();
   }
 
-  // 内径 rIn 〜 外径 rOut のリング扇形（overlapInner=true のときは内円との隙間防止で1px内側に重ねる）
-  function ringSector(cx, cy, rIn, rOut, startAngle, endAngle, color, overlapInner = true) {
-    if (endAngle <= startAngle) return;
-    const inner = overlapInner ? Math.max(0, rIn - 1) : rIn;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(cx, cy, rOut, startAngle, endAngle, false);
-    ctx.arc(cx, cy, inner, endAngle, startAngle, true);
-    ctx.closePath();
-    ctx.fill();
-  }
+  let smoothHour = true;
 
-  function pieFrom12(cx, cy, r, progress, fg, bg) {
-    circle(cx, cy, r, bg);
-    if (progress > 0) {
-      sector(cx, cy, r, START, START + TAU * Math.min(progress, 1), fg);
+  // 短針（空）のグラデーション生成
+  function createHourSkyGradient(cx, cy, r, aHr, colors) {
+    if (gradStyle === 'conic' && typeof ctx.createConicGradient === 'function') {
+      const g = ctx.createConicGradient(aHr, cx, cy);
+      g.addColorStop(0.0, colors.skyHorizon);
+      g.addColorStop(0.5, colors.skyMid);
+      g.addColorStop(1.0, colors.skyTop);
+      return g;
+    } else if (gradStyle === 'radial') {
+      const g = ctx.createRadialGradient(cx, cy, r * 0.05, cx, cy, r);
+      g.addColorStop(0.0, colors.skyHorizon);
+      g.addColorStop(0.55, colors.skyMid);
+      g.addColorStop(1.0, colors.skyTop);
+      return g;
+    } else {
+      const g = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
+      g.addColorStop(0.0, colors.skyTop);
+      g.addColorStop(0.52, colors.skyMid);
+      g.addColorStop(1.0, colors.skyHorizon);
+      return g;
     }
   }
 
-  /* ---------- 4つの検証パターン ---------- */
+  // 外周秒リングのグラデーション生成（12時位置から現在の秒針の先端へ向けて円周状に変化）
+  function createSecondRingFill(cx, cy, R, sec, colors) {
+    if (!secGradOn) {
+      return colors.accentColor;
+    }
+    if (typeof ctx.createConicGradient === 'function') {
+      const g = ctx.createConicGradient(START, cx, cy);
+      const endStop = Math.max(0.02, Math.min(1.0, sec));
+      g.addColorStop(0.0, colors.accStart);
+      g.addColorStop(endStop, colors.accEnd);
+      if (endStop < 1.0) g.addColorStop(1.0, colors.accEnd);
+      return g;
+    }
+    const g = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+    g.addColorStop(0, colors.accStart);
+    g.addColorStop(1, colors.accEnd);
+    return g;
+  }
 
-  // ① 低明度左上（短針[滑らか移動]➔長針＝明色 / 残り＝低明度）
-  function drawPattern1(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
-    const [secBright, secDark, minBright, hrDark] = p;
+  function drawClockForDate(cx, cy, R, date) {
+    const colors = getTimeColor(date);
+    const sec = (date.getSeconds() + date.getMilliseconds() / 1000) / 60;
+    const min = (date.getMinutes() + sec) / 60;
+    const h   = date.getHours() % 12;
+    const hrAngle = smoothHour ? (h + min) / 12 : h / 12;
+
     const r = R * (1 - RING_RATIO);
-    pieFrom12(cx, cy, R, secProg, secBright, secDark);
-    circle(cx, cy, r, hrDark);
-    const aHr = START + TAU * hrSmooth;
-    let aMin  = START + TAU * minProg;
+    const aHr = START + TAU * hrAngle;
+    let aMin  = START + TAU * min;
     if (aMin <= aHr) aMin += TAU;
-    sector(cx, cy, r, aHr, aMin, minBright);
+
+    // 1. 外周秒リング（secGradOn でグラデーション ⇔ ソリッド単色を切り替え）
+    circle(cx, cy, R, colors.ringBgColor);
+    if (sec > 0) {
+      const secFill = createSecondRingFill(cx, cy, R, Math.min(sec, 1), colors);
+      sector(cx, cy, R, START, START + TAU * Math.min(sec, 1), secFill);
+    }
+
+    // 2. 短針（ベース面）
+    if (colors.gradMode === 'hourGrad' || colors.gradMode === 'allGrad') {
+      const skyFill = createHourSkyGradient(cx, cy, r, aHr, colors);
+      circle(cx, cy, r, skyFill);
+    } else {
+      circle(cx, cy, r, colors.backgroundColor);
+    }
+
+    // 3. 長針（ウェッジ）
+    if (colors.gradMode === 'allGrad') {
+      const midAngle = (aHr + aMin) * 0.5;
+      const sunGrad = ctx.createLinearGradient(
+        cx + Math.cos(aHr) * r * 0.8,
+        cy + Math.sin(aHr) * r * 0.8,
+        cx + Math.cos(midAngle) * r,
+        cy + Math.sin(midAngle) * r
+      );
+      sunGrad.addColorStop(0, colors.mainStart);
+      sunGrad.addColorStop(1, colors.mainEnd);
+      sector(cx, cy, r, aHr, aMin, sunGrad);
+    } else {
+      sector(cx, cy, r, aHr, aMin, colors.mainColor);
+    }
+
+    return colors;
   }
 
-  // ② 低明度＋12時基準（長針＝12時から明色 / 内側扇形＝時[滑らか移動]）
-  function drawPattern2(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
-    const [secBright, secDark, minBright, hrDark, colMarker] = p;
-    const r = R * (1 - RING_RATIO);
-    pieFrom12(cx, cy, R, secProg, secBright, secDark);
-    pieFrom12(cx, cy, r, minProg, minBright, hrDark);
-    sector(cx, cy, r * 0.56, START, START + TAU * hrSmooth, colMarker);
+  /* ==========================================================================
+   * 3. モード管理・アニメーションループ
+   * ========================================================================== */
+  let mode = 'all8';
+  let timelapseStart = performance.now();
+  let compareStart = performance.now();
+
+  const slider = document.getElementById('time-slider');
+  const scrubberTimeLabel = document.getElementById('scrubber-time');
+
+  function makeDateFromSeconds(totalSec) {
+    const d = new Date();
+    const sNorm = ((totalSec % 86400) + 86400) % 86400;
+    const hh = Math.floor(sNorm / 3600);
+    const mm = Math.floor((sNorm % 3600) / 60);
+    const ss = Math.floor(sNorm % 60);
+    const ms = Math.round((sNorm - Math.floor(sNorm)) * 1000);
+    d.setHours(hh, mm, ss, ms);
+    return d;
   }
 
-  // ③ パターンA（画像1）：
-  // ・短針の目印は必ずその「時」の位置（8時なら8の位置）を指す
-  // ・目印は内円にも外周にも一切はみ出さず、秒リングの帯（r 〜 R）の中にピタッと綺麗に収める
-  function drawPattern3(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
-    const [colMinFg, colMinBg, colSec, colHr] = useMockupColors
-      ? MOCKUP_PALETTE_A
-      : [p[2], p[3], p[0], p[4]];
-    const r = R * (1 - RING_RATIO); // 内円の半径（＝秒リングの内径）
-
-    // 1. 外側の秒リング（r 〜 R）
-    ringSector(cx, cy, r, R, START, START + TAU * secProg, colSec, true);
-
-    // 2. 短針（時）の目印：秒リングの帯（r 〜 R）の厚みに100%ぴったり収まる扇形ブロック
-    const aHr = START + TAU * hrFixed; // 必ずその時間の数字の位置（8時なら240°）
-    const markerSpan = 0.095;          // 目印の角度幅（約5.4°）
-    const mStart = centerMarker ? aHr - markerSpan / 2 : aHr - markerSpan;
-    const mEnd   = centerMarker ? aHr + markerSpan / 2 : aHr;
-    ringSector(cx, cy, r, R, mStart, mEnd, colHr, true);
-
-    // 3. 内側の円（分）を最後に上から描くことで、内円側へのはみ出しをゼロにし境界を完全にフラットにする
-    circle(cx, cy, r, colMinBg);
-    sector(cx, cy, r, START, START + TAU * minProg, colMinFg);
+  function formatHMS(date) {
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
   }
 
-  // ④ パターンB（画像2）：中心の小さい扇形で秒（経過分のみ）＋ 外周上の丸ドット時マーカー
-  function drawPattern4(cx, cy, R, hrFixed, hrSmooth, minProg, secProg, p) {
-    const [colMinFg, colMinBg, colSec, colHr] = useMockupColors
-      ? MOCKUP_PALETTE_B
-      : [p[2], p[3], p[0], p[4]];
-    const r = R * 0.91;
-    const rSec = r * 0.285;
-    const rDot = r * 0.068;
-
-    circle(cx, cy, r, colMinBg);
-    sector(cx, cy, r, START, START + TAU * minProg, colMinFg);
-    sector(cx, cy, rSec, START, START + TAU * secProg, colSec);
-
-    const aHr = START + TAU * hrFixed;
-    const dotX = cx + Math.cos(aHr) * r;
-    const dotY = cy + Math.sin(aHr) * r;
-    circle(dotX, dotY, rDot, colHr);
+  function getThemeTitle() {
+    const secLabel = secGradOn ? '秒リング＝グラデ✨' : '秒リング＝単色●';
+    if (themeMode === 'hourGrad') {
+      return `【① 短針グラデ × 長針単色 (${secLabel}) 🌅】短針が空のグラデーション、長針はフラット単色`;
+    } else if (themeMode === 'sky24h') {
+      return `【② 短針・長針とも単色 (${secLabel}) 🌤️】短針の色が24時間で空の色として連続変化`;
+    } else if (themeMode === 'allGrad') {
+      return `【③ 短針・長針ともグラデ (${secLabel}) 🌈】短針も長針もグラデーションで描画`;
+    } else {
+      return `【④ 従来ソリッド版 (${secLabel}) 🎨】（12:00-15:00の短針＝スカーレット赤）`;
+    }
   }
-
-  const PATTERNS = [
-    { fn: drawPattern1, label: '① 低明度左上（短針[滑らか移動]➔長針＝明色 / 残り＝低明度）' },
-    { fn: drawPattern2, label: '② 低明度＋12時基準（長針＝12時から明色 / 内側扇形＝短針）' },
-    { fn: drawPattern3, label: '③ パターンA：秒エリア内に収まる時マーカー（8の位置に固定）' },
-    { fn: drawPattern4, label: '④ パターンB：中心秒扇形＋外周の丸ドット（8の位置に固定）' },
-  ];
-
-  let lastMinuteKey = -1;
 
   function frame() {
-    let now;
-    if (simStart !== null) {
-      const elapsed = performance.now() - simStart.t0;
-      const base = new Date();
-      base.setHours(simStart.h, simStart.m, simStart.s, 0);
-      now = new Date(base.getTime() + elapsed);
-    } else {
-      now = new Date();
-    }
-
-    const key = Math.floor(now.getTime() / 60000);
-    if (key !== lastMinuteKey) {
-      if (lastMinuteKey !== -1 && !useMockupColors) newPalette();
-      lastMinuteKey = key;
-    }
-
-    const sec = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
-    const min = (now.getMinutes() + sec) / 60;
-    const h   = now.getHours() % 12;
-    const hrFixed  = h / 12;          // パターン3・4用：その「時」の数字の位置（8時なら8の位置）
-    const hrSmooth = (h + min) / 12;  // パターン1・2用：分に合わせて滑らかに移動（8:40なら8と9の間）
-
-    const bg = darkBg ? '#111111' : '#ffffff';
-    const divider = darkBg ? '#262626' : '#e0e0e0';
-    const labelColor = darkBg ? '#aaaaaa' : '#444444';
-
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = bg;
+    ctx.fillStyle = '#111111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.lineCap = 'butt';
 
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
+    const themeTitle = getThemeTitle();
 
-    if (activePattern === null) {
-      const cw = W / 2;
-      const ch = H / 2;
-      const R = Math.min(cw, ch) * 0.82 / 2;
-
-      for (let i = 0; i < 4; i++) {
-        const col = i % 2;
-        const row = Math.floor(i / 2);
-        const x0 = col * cw;
-        const y0 = row * ch;
-        const cx = x0 + cw / 2;
-        const cy = y0 + ch / 2 + 10;
-
-        PATTERNS[i].fn(cx, cy, R, hrFixed, hrSmooth, min, sec, palette);
-
-        ctx.fillStyle = labelColor;
-        ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-        ctx.textBaseline = 'top';
-        ctx.fillText(`${PATTERNS[i].label} [${hh}:${mm}:${ss}]`, x0 + 14, y0 + 12);
+    if (mode === 'live' || mode === 'timelapse' || mode === 'scrub') {
+      let targetDate;
+      if (mode === 'live') {
+        targetDate = new Date();
+        const curSec = targetDate.getHours() * 3600 + targetDate.getMinutes() * 60 + targetDate.getSeconds();
+        slider.value = curSec;
+      } else if (mode === 'timelapse') {
+        const elapsedSec = (performance.now() - timelapseStart) / 1000;
+        const simSec = (elapsedSec * 3600) % 86400;
+        targetDate = makeDateFromSeconds(simSec);
+        slider.value = Math.floor(simSec);
+      } else {
+        const baseSec = Number(slider.value);
+        const subSec = ((performance.now() - compareStart) / 1000) % 60;
+        targetDate = makeDateFromSeconds(baseSec + subSec);
       }
 
-      ctx.fillStyle = divider;
-      ctx.fillRect(cw - 0.5, 0, 1, H);
-      ctx.fillRect(0, ch - 0.5, W, 1);
-    } else {
-      const R = Math.min(W, H) * 0.90 / 2;
-      PATTERNS[activePattern].fn(W / 2, H / 2, R, hrFixed, hrSmooth, min, sec, palette);
+      scrubberTimeLabel.textContent = formatHMS(targetDate);
 
-      ctx.fillStyle = labelColor;
-      ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`${PATTERNS[activePattern].label} [${hh}:${mm}:${ss}]（クリックで4分割に戻る）`, 16, 14);
+      const R = Math.min(W, H) * 0.74 / 2;
+      const colors = drawClockForDate(W / 2, H / 2, R, targetDate);
+
+      ctx.fillStyle = '#eeeeee';
+      ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(
+        `${formatHMS(targetDate)}  [${colors.phase.range} : ${colors.phase.name}]  短針(空) HSL(${colors.hsl.h}°, ${colors.hsl.s}%, ${colors.hsl.l}%)`,
+        20, 26
+      );
+
+      ctx.fillStyle = '#9999a5';
+      ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(
+        `${themeTitle}（画面クリックで8フェーズ一覧へ）`,
+        20, 46
+      );
+
+    } else if (mode === 'compare') {
+      const elapsedSec = (performance.now() - compareStart) / 1000;
+      const d1220 = makeDateFromSeconds(12 * 3600 + 20 * 60 + 45 + elapsedSec);
+      const d1705 = makeDateFromSeconds(17 * 3600 + 5 * 60 + 45 + elapsedSec);
+
+      const cw = W / 2;
+      const ch = H - 76;
+      const R = Math.min(cw, ch) * 0.74 / 2;
+
+      const c1 = drawClockForDate(cw / 2, ch / 2 + 24, R, d1220);
+      const c2 = drawClockForDate(cw + cw / 2, ch / 2 + 24, R, d1705);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#eeeeee';
+      ctx.font = '700 17px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(`12:20 (${formatHMS(d1220)}) — ${c1.phase.name}`, cw / 2, 34);
+      ctx.fillText(`17:05 (${formatHMS(d1705)}) — ${c2.phase.name}`, cw + cw / 2, 34);
+
+      ctx.fillStyle = '#9999a5';
+      ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(themeTitle, cw, 56);
+
+      ctx.fillStyle = '#26262c';
+      ctx.fillRect(cw - 0.5, 0, 1, H);
+
+    } else if (mode === 'all8') {
+      const cols = 4, rows = 2;
+      const topPad = 46;
+      const botPad = 82;
+      const cw = W / cols;
+      const ch = (H - topPad - botPad) / rows;
+      const R = Math.min(cw, ch) * 0.72 / 2;
+      const elapsedSec = ((performance.now() - compareStart) / 1000) % 60;
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(`${themeTitle}`, 18, 20);
+
+      for (let i = 0; i < 8; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x0 = col * cw;
+        const y0 = topPad + row * ch;
+        const cx = x0 + cw / 2;
+        const cy = y0 + ch / 2 + 14;
+
+        const baseSec = PHASE_LABELS[i].sampleSec;
+        const d = makeDateFromSeconds(baseSec - 45 + elapsedSec);
+        drawClockForDate(cx, cy, R, d);
+
+        const hhStr = String(d.getHours()).padStart(2, '0');
+        const mmStr = String(d.getMinutes()).padStart(2, '0');
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#eeeeee';
+        ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`${i + 1}. ${PHASE_LABELS[i].range} (例 ${hhStr}:${mmStr})`, cx, y0 + 10);
+
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`${PHASE_LABELS[i].name}`, cx, y0 + 26);
+
+        if (col > 0) {
+          ctx.fillStyle = '#1f1f24';
+          ctx.fillRect(x0 - 0.5, topPad, 1, H - topPad - botPad);
+        }
+      }
+      ctx.fillStyle = '#1f1f24';
+      ctx.fillRect(0, topPad + ch - 0.5, W, 1);
     }
 
     requestAnimationFrame(frame);
   }
 
-  /* ---------- UI操作 ---------- */
-  const btn840 = document.getElementById('btn-840');
-  const btn1220 = document.getElementById('btn-1220');
-  const btnLive = document.getElementById('btn-live');
-  const btnAlign = document.getElementById('btn-align');
-  const btnColor = document.getElementById('btn-color');
-  const btnBg = document.getElementById('btn-bg');
+  /* ==========================================================================
+   * 4. UIイベント
+   * ========================================================================== */
+  const btnHourGrad  = document.getElementById('btn-theme-hourgrad');
+  const btnSky24h    = document.getElementById('btn-theme-sky24h');
+  const btnAllGrad   = document.getElementById('btn-theme-allgrad');
+  const btnClassic   = document.getElementById('btn-theme-classic');
+  const btnGradDir   = document.getElementById('btn-grad-dir');
+  const btnSecGrad   = document.getElementById('btn-sec-grad');
 
-  function setTimeButtonActive(target) {
-    [btn840, btn1220, btnLive].forEach(b => b.classList.toggle('active', b === target));
+  const btnAll8      = document.getElementById('btn-all8');
+  const btnCompare   = document.getElementById('btn-compare');
+  const btnLive      = document.getElementById('btn-live');
+  const btnTimelapse = document.getElementById('btn-timelapse');
+  const btnHourMode  = document.getElementById('btn-hour-mode');
+
+  function setThemeMode(newTheme) {
+    themeMode = newTheme;
+    [btnHourGrad, btnSky24h, btnAllGrad, btnClassic].forEach(b => b.classList.remove('theme-active'));
+    if (newTheme === 'hourGrad') btnHourGrad.classList.add('theme-active');
+    if (newTheme === 'sky24h')   btnSky24h.classList.add('theme-active');
+    if (newTheme === 'allGrad')  btnAllGrad.classList.add('theme-active');
+    if (newTheme === 'classic')  btnClassic.classList.add('theme-active');
+    btnGradDir.style.display = (newTheme === 'hourGrad' || newTheme === 'allGrad') ? '' : 'none';
+    updateSkyStrip();
   }
 
-  btn840.addEventListener('click', e => {
+  btnHourGrad.addEventListener('click', e => { e.stopPropagation(); setThemeMode('hourGrad'); });
+  btnSky24h.addEventListener('click',   e => { e.stopPropagation(); setThemeMode('sky24h'); });
+  btnAllGrad.addEventListener('click',  e => { e.stopPropagation(); setThemeMode('allGrad'); });
+  btnClassic.addEventListener('click',  e => { e.stopPropagation(); setThemeMode('classic'); });
+
+  btnSecGrad.addEventListener('click', e => {
     e.stopPropagation();
-    simStart = { h: 8, m: 40, s: 0, t0: performance.now() };
-    useMockupColors = false;
-    setTimeButtonActive(btn840);
+    secGradOn = !secGradOn;
+    btnSecGrad.textContent = secGradOn ? '秒リング: グラデーション ✨' : '秒リング: ソリッド単色 ●';
+    btnSecGrad.classList.toggle('sec-active', secGradOn);
   });
 
-  btn1220.addEventListener('click', e => {
+  btnGradDir.addEventListener('click', e => {
     e.stopPropagation();
-    simStart = { h: 12, m: 20, s: 45, t0: performance.now() };
-    useMockupColors = true;
-    setTimeButtonActive(btn1220);
+    if (gradStyle === 'vertical') {
+      gradStyle = 'conic';
+      btnGradDir.textContent = '短針グラデ方向: 円周角度';
+    } else if (gradStyle === 'conic') {
+      gradStyle = 'radial';
+      btnGradDir.textContent = '短針グラデ方向: 中心➔外周';
+    } else {
+      gradStyle = 'vertical';
+      btnGradDir.textContent = '短針グラデ方向: 天頂➔地平線';
+    }
+  });
+
+  function setActiveButton(target) {
+    [btnAll8, btnCompare, btnLive, btnTimelapse].forEach(b => b.classList.toggle('active', b === target));
+  }
+
+  btnAll8.addEventListener('click', e => {
+    e.stopPropagation();
+    mode = 'all8';
+    compareStart = performance.now();
+    setActiveButton(btnAll8);
+  });
+
+  btnCompare.addEventListener('click', e => {
+    e.stopPropagation();
+    mode = 'compare';
+    compareStart = performance.now();
+    setActiveButton(btnCompare);
   });
 
   btnLive.addEventListener('click', e => {
     e.stopPropagation();
-    simStart = null;
-    useMockupColors = false;
-    setTimeButtonActive(btnLive);
+    mode = 'live';
+    setActiveButton(btnLive);
   });
 
-  btnAlign.addEventListener('click', e => {
+  btnTimelapse.addEventListener('click', e => {
     e.stopPropagation();
-    centerMarker = !centerMarker;
-    btnAlign.textContent = centerMarker ? '③目印: 時の線に中央揃え' : '③目印: 時の線に右端揃え';
-    btnAlign.classList.toggle('active', centerMarker);
+    mode = 'timelapse';
+    timelapseStart = performance.now();
+    setActiveButton(btnTimelapse);
   });
 
-  btnColor.addEventListener('click', e => {
+  btnHourMode.addEventListener('click', e => {
     e.stopPropagation();
-    useMockupColors = false;
-    newPalette();
+    smoothHour = !smoothHour;
+    btnHourMode.textContent = smoothHour ? '短針: 滑らか' : '短針: 固定';
+    btnHourMode.classList.toggle('active', !smoothHour);
   });
 
-  btnBg.addEventListener('click', e => {
-    e.stopPropagation();
-    darkBg = !darkBg;
-    btnBg.textContent = darkBg ? '背景: ダーク(#111)' : '背景: 白(#fff)';
+  slider.addEventListener('input', () => {
+    mode = 'scrub';
+    compareStart = performance.now();
+    setActiveButton(null);
   });
 
   canvas.addEventListener('click', e => {
-    if (activePattern === null) {
-      const col = e.clientX < W / 2 ? 0 : 1;
-      const row = e.clientY < H / 2 ? 0 : 1;
-      activePattern = row * 2 + col;
-    } else {
-      activePattern = null;
+    if (mode === 'all8') {
+      const topPad = 46, botPad = 82;
+      const col = Math.min(3, Math.max(0, Math.floor((e.clientX / W) * 4)));
+      const row = e.clientY < topPad + (H - topPad - botPad) / 2 ? 0 : 1;
+      const idx = row * 4 + col;
+      slider.value = PHASE_LABELS[idx].sampleSec;
+      compareStart = performance.now();
+      mode = 'scrub';
+      setActiveButton(null);
+    } else if (mode === 'scrub') {
+      mode = 'all8';
+      setActiveButton(btnAll8);
     }
   });
 
+  let idleTimer;
+  function wake() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.body.classList.add('idle'), 3500);
+  }
+  window.addEventListener('mousemove', wake);
+  window.addEventListener('pointerdown', wake);
+  wake();
+
+  updateSkyStrip();
   resize();
   requestAnimationFrame(frame);
 })();

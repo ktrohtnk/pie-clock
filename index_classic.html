@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Pie Clock - 24h Hue Progression & High Contrast</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #111;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  }
+  body.idle { cursor: none; }
+  body.idle .ui-panel { opacity: 0; pointer-events: none; }
+  canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .ui-panel {
+    transition: opacity 0.4s ease;
+    z-index: 10;
+  }
+  #toolbar {
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 95vw;
+    justify-content: flex-end;
+  }
+  #toolbar button {
+    background: #222226;
+    color: #cccccc;
+    border: 1px solid #3a3a42;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #toolbar button.active {
+    background: #eeeeee;
+    color: #111111;
+    border-color: #eeeeee;
+  }
+  #scrubber-bar {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(780px, 92vw);
+    background: #18181c;
+    border: 1px solid #33333a;
+    padding: 9px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #dddddd;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  #time-slider {
+    flex: 1;
+    cursor: pointer;
+    accent-color: #ffffff;
+  }
+  #scrubber-time {
+    min-width: 66px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+<div id="toolbar" class="ui-panel">
+  <button id="btn-all8" class="active">8フェーズ一覧比較 (クリックで拡大)</button>
+  <button id="btn-compare">12:20 vs 16:05 並べて比較</button>
+  <button id="btn-live">現在時刻 (リアルタイム連動)</button>
+  <button id="btn-timelapse">24時間 早送り再生</button>
+  <button id="btn-hour-mode">短針: 滑らか移動</button>
+</div>
+
+<div id="scrubber-bar" class="ui-panel">
+  <span>24時間シーク (00:00〜24:00)</span>
+  <input id="time-slider" type="range" min="0" max="86399" step="1" value="44445">
+  <span id="scrubber-time">12:20:45</span>
+</div>
+
+<canvas id="clock"></canvas>
+<script>
+(() => {
+  'use strict';
+  const TAU = Math.PI * 2;
+  const START = -Math.PI / 2; // 12時の位置 (真上)
+  const RING_RATIO = 0.16;
+
+  const canvas = document.getElementById('clock');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  /* ==========================================================================
+   * 1. 時間帯別のカラートーン定義（色相で時間帯を表現 ＋ 常に明度差35%〜48%を確保）
+   * ==========================================================================
+   * 【設計原則】
+   * ・どの時間帯（深夜〜昼〜夜）でも、「長針（main）＝明るい（L:48〜68%）」と
+   *   「短針側ベース（bg）＝暗い（L:14〜20%）」の間に必ず34%〜48%の大きな明度差を確保し、
+   *   ひと目で針の境界が見える視認性を維持する。
+   * ・時間帯ごとの空気感（深夜の青紫、未明のモーヴ、朝の爽やかな水色〜黄色、
+   *   午前の新緑、昼下がりの100%ビビッド、夕方の茜色〜アンバー、宵のマゼンタ〜群青、
+   *   夜のサファイア〜インディゴ）は「色相（Hue）」の推移で鮮やかに表現する。
+   */
+  const PHASES = [
+    {
+      index: 1, range: '00:00 - 03:00', name: '深夜 / ダーク・ディープグレー',
+      main:   { hStart: 240, hEnd: 260, s: 22, l: 38 }, // 長針（明）：静かな青紫グレー
+      bg:     { hStart: 250, hEnd: 270, s: 16, l: 15 }, // 短針（暗）：ディープチャコールグレー
+      accent: { hStart: 210, hEnd: 230, s: 28, l: 45 }, // 秒経過（明）：クールスレート
+      ringBg: { hStart: 230, hEnd: 245, s: 14, l: 10 }, // 秒未経過（暗）：ダークグラファイト
+    },
+    {
+      index: 2, range: '03:00 - 06:00', name: '未明〜明け方 / ダスティ・スモーキー',
+      main:   { hStart: 220, hEnd: 280, s: 35, l: 56 }, // 長針（明）：霧がかったスモーキーラベンダー
+      bg:     { hStart: 200, hEnd: 230, s: 28, l: 26 }, // 短針（暗）：ダスティブルーグレー
+      accent: { hStart: 300, hEnd: 335, s: 40, l: 62 }, // 秒経過（明）：くすんだ朝靄ローズ
+      ringBg: { hStart: 245, hEnd: 270, s: 24, l: 18 }, // 秒未経過（暗）：スモーキースレート
+    },
+    {
+      index: 3, range: '06:00 - 09:00', name: '朝方 / ペール・パステル',
+      // 4色すべて S=100%・L=66〜82%（RGB最大値=255に白だけを混ぜた濁りゼロの純パステル）
+      main:   { hStart: 50,  hEnd: 58,  s: 100, l: 80 }, // 長針（明）：パステル・レモンイエロー（#ffee99）
+      bg:     { hStart: 210, hEnd: 226, s: 100, l: 66 }, // 短針（パステル青）：パステル・スカイブルー（#529aff）
+      accent: { hStart: 335, hEnd: 352, s: 100, l: 76 }, // 秒経過（明）：パステル・フラミンゴピンク（#ff85b8）
+      ringBg: { hStart: 162, hEnd: 176, s: 100, l: 66 }, // 秒未経過（パステル緑）：パステル・ミント（#52ffd4）
+    },
+    {
+      index: 4, range: '09:00 - 12:00', name: '午前 / ブライト・フレッシュ',
+      // 4色すべて S=100%・L=50〜58%（RGB最大値=255、黒・灰の混入0%！）
+      main:   { hStart: 145, hEnd: 162, s: 100, l: 52 }, // 長針（明）：純色ネオン・ミントグリーン（#0aff8d）
+      bg:     { hStart: 218, hEnd: 230, s: 100, l: 52 }, // 短針（純色青）：純色コバルトブルー（#0a5cff）
+      accent: { hStart: 48,  hEnd: 56,  s: 100, l: 54 }, // 秒経過（明）：純色サンシャイン・イエロー（#ffe014）
+      ringBg: { hStart: 186, hEnd: 198, s: 100, l: 50 }, // 秒未経過（純色水色）：純色シアンブルー（#00ccff）
+    },
+    {
+      index: 5, range: '12:00 - 15:00', name: '昼下がり / ビビッド・サン（真昼の太陽）',
+      // 4色すべて S=100%・L=50〜56%（RGB最大値=255、黒混入0%の極限ビビッド！）
+      main:   { hStart: 50,  hEnd: 56,  s: 100, l: 54 }, // 長針（明）：純色サン・イエロー（#ffea14）
+      bg:     { hStart: 348, hEnd: 368, s: 100, l: 52 }, // 短針（純色赤）：純色スカーレット・レッド（#ff0a2b）
+      accent: { hStart: 160, hEnd: 178, s: 100, l: 50 }, // 秒経過（明）：純色エレクトリック・エメラルド（#00ffaa）
+      ringBg: { hStart: 222, hEnd: 236, s: 100, l: 52 }, // 秒未経過（純色青）：純色ロイヤル・ブルー（#0a4bff）
+    },
+    {
+      index: 6, range: '15:00 - 18:00', name: '夕方 / ウォーム・ディープ（沈む夕陽）',
+      main:   { hStart: 378, hEnd: 350, s: 94,  l: 52 }, // 長針（明）：夕陽のアンバーオレンジ〜濃厚な茜色(クリムゾン)
+      bg:     { hStart: 320, hEnd: 342, s: 84,  l: 22 }, // 短針（暗）：黄昏のディープワイン〜バーガンディ
+      accent: { hStart: 35,  hEnd: 46,  s: 96,  l: 56 }, // 秒経過（明）：夕焼けのゴールデンアンバー
+      ringBg: { hStart: 282, hEnd: 308, s: 76,  l: 15 }, // 秒未経過（暗）：トワイライトプラム
+    },
+    {
+      index: 7, range: '18:00 - 21:00', name: '宵 / トワイライト・ダル',
+      main:   { hStart: 280, hEnd: 330, s: 56,  l: 46 }, // 長針（明）：くすみを帯びたダルマゼンタ〜ライラック
+      bg:     { hStart: 238, hEnd: 265, s: 50,  l: 20 }, // 短針（暗）：群青（ウルトラマリンダスク）
+      accent: { hStart: 335, hEnd: 360, s: 62,  l: 52 }, // 秒経過（明）：ダスティローズ
+      ringBg: { hStart: 220, hEnd: 242, s: 44,  l: 13 }, // 秒未経過（暗）：ディープトワイライトネイビー
+    },
+    {
+      index: 8, range: '21:00 - 24:00', name: '夜 / ナイトダーク',
+      main:   { hStart: 225, hEnd: 250, s: 44,  l: 38 }, // 長針（明）：ナイトインディゴブルー
+      bg:     { hStart: 235, hEnd: 255, s: 35,  l: 15 }, // 短針（暗）：チャコールネイビー
+      accent: { hStart: 195, hEnd: 215, s: 50,  l: 44 }, // 秒経過（明）：ムーンライトスチールブルー
+      ringBg: { hStart: 220, hEnd: 238, s: 28,  l: 10 }, // 秒未経過（暗）：ダークナイトチャコール
+    }
+  ];
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function cosInterp(t) {
+    return (1 - Math.cos(t * Math.PI)) * 0.5;
+  }
+
+  function lerpHueShort(h1, h2, t) {
+    const diff = ((((h2 - h1) % 360) + 540) % 360) - 180;
+    return (((h1 + diff * t) % 360) + 360) % 360;
+  }
+
+  function hsl2hex(h, s, l) {
+    h = ((h % 360) + 360) % 360;
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const x = v => Math.round(v * 255).toString(16).padStart(2, '0');
+    return '#' + x(f(0)) + x(f(8)) + x(f(4));
+  }
+
+  function interpTrack(currTrack, nextTrack, localT) {
+    let h, s, l;
+    if (localT < 0.80) {
+      const u = cosInterp(localT / 0.80);
+      h = ((lerp(currTrack.hStart, currTrack.hEnd, u) % 360) + 360) % 360;
+      s = currTrack.s;
+      l = currTrack.l;
+    } else {
+      const b = cosInterp((localT - 0.80) / 0.20);
+      const endH = ((currTrack.hEnd % 360) + 360) % 360;
+      const nextStartH = ((nextTrack.hStart % 360) + 360) % 360;
+      h = lerpHueShort(endH, nextStartH, b);
+      s = lerp(currTrack.s, nextTrack.s, b);
+      l = lerp(currTrack.l, nextTrack.l, b);
+    }
+    return { h, s, l, hex: hsl2hex(h, s, l) };
+  }
+
+  /**
+   * getTimeColor(date)
+   * 現在時刻から1日の経過率（0.0〜1.0）を算出し、
+   * 色相で8つの時間帯を表現しつつ、長針（明）と短針（暗）の明度差を常に34%〜49%確保したカラーを返す。
+   */
+  function getTimeColor(date) {
+    const totalSeconds =
+      date.getHours() * 3600 +
+      date.getMinutes() * 60 +
+      date.getSeconds() +
+      date.getMilliseconds() / 1000;
+
+    const dayProgress = totalSeconds / 86400;
+    const exactPhase = dayProgress * 8;
+    const idx = Math.floor(exactPhase) % 8;
+    const nextIdx = (idx + 1) % 8;
+    const localT = exactPhase - Math.floor(exactPhase);
+
+    const curr = PHASES[idx];
+    const next = PHASES[nextIdx];
+
+    const main   = interpTrack(curr.main,   next.main,   localT);
+    const accent = interpTrack(curr.accent, next.accent, localT);
+    const bg     = interpTrack(curr.bg,     next.bg,     localT);
+    const ringBg = interpTrack(curr.ringBg, next.ringBg, localT);
+
+    return {
+      mainColor: main.hex,             // 長針側ウェッジ（明色：L 48〜68%）
+      backgroundColor: bg.hex,         // 短針側ベース（暗色：L 14〜19%）
+      accentColor: accent.hex,         // 外周秒リング経過（明色：L 54〜66%）
+      ringBgColor: ringBg.hex,         // 外周秒リング未経過（暗色：L 10〜13%）
+      screenBg: '#111111',
+      dayProgress,
+      phase: curr,
+      hsl: {
+        h: Math.round(main.h),
+        s: Math.round(main.s),
+        l: Math.round(main.l),
+        bgL: Math.round(bg.l)
+      }
+    };
+  }
+
+  /* ==========================================================================
+   * 2. 時計描画ロジック（以前の左上バージョン：マーカーなし完全フラット）
+   * ========================================================================== */
+  let W = 0, H = 0, dpr = 1;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+
+  function circle(cx, cy, r, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.fill();
+  }
+
+  function sector(cx, cy, r, startAngle, endAngle, color) {
+    if (endAngle <= startAngle) return;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function pieFrom12(cx, cy, r, progress, fg, bg) {
+    circle(cx, cy, r, bg);
+    if (progress > 0) {
+      sector(cx, cy, r, START, START + TAU * Math.min(progress, 1), fg);
+    }
+  }
+
+  let smoothHour = true;
+
+  function drawClockForDate(cx, cy, R, date) {
+    const colors = getTimeColor(date);
+    const sec = (date.getSeconds() + date.getMilliseconds() / 1000) / 60;
+    const min = (date.getMinutes() + sec) / 60;
+    const h   = date.getHours() % 12;
+    const hrAngle = smoothHour ? (h + min) / 12 : h / 12;
+
+    const r = R * (1 - RING_RATIO);
+
+    // 1. 外側のリング（秒）：経過＝accentColor(明)、未経過＝ringBgColor(暗)
+    pieFrom12(cx, cy, R, sec, colors.accentColor, colors.ringBgColor);
+
+    // 2. 内側の円（時＋分）：短針側ベース＝backgroundColor(暗)、短針➔長針＝mainColor(明)
+    circle(cx, cy, r, colors.backgroundColor);
+
+    const aHr = START + TAU * hrAngle;
+    let aMin  = START + TAU * min;
+    if (aMin <= aHr) aMin += TAU;
+    sector(cx, cy, r, aHr, aMin, colors.mainColor);
+
+    return colors;
+  }
+
+  /* ==========================================================================
+   * 3. モード管理・アニメーションループ
+   * ========================================================================== */
+  let mode = 'all8';
+  let timelapseStart = performance.now();
+  let compareStart = performance.now();
+
+  const slider = document.getElementById('time-slider');
+  const scrubberTimeLabel = document.getElementById('scrubber-time');
+
+  function makeDateFromSeconds(totalSec) {
+    const d = new Date();
+    const sNorm = ((totalSec % 86400) + 86400) % 86400;
+    const hh = Math.floor(sNorm / 3600);
+    const mm = Math.floor((sNorm % 3600) / 60);
+    const ss = Math.floor(sNorm % 60);
+    const ms = Math.round((sNorm - Math.floor(sNorm)) * 1000);
+    d.setHours(hh, mm, ss, ms);
+    return d;
+  }
+
+  function formatHMS(date) {
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  const SAMPLE_HOURS = [1, 4, 7, 10, 13, 16, 19, 22];
+
+  function frame() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineCap = 'butt';
+
+    if (mode === 'live' || mode === 'timelapse' || mode === 'scrub') {
+      let targetDate;
+      if (mode === 'live') {
+        targetDate = new Date();
+        const curSec = targetDate.getHours() * 3600 + targetDate.getMinutes() * 60 + targetDate.getSeconds();
+        slider.value = curSec;
+      } else if (mode === 'timelapse') {
+        const elapsedSec = (performance.now() - timelapseStart) / 1000;
+        const simSec = (elapsedSec * 3600) % 86400;
+        targetDate = makeDateFromSeconds(simSec);
+        slider.value = Math.floor(simSec);
+      } else {
+        const baseSec = Number(slider.value);
+        const subSec = ((performance.now() - compareStart) / 1000) % 60;
+        targetDate = makeDateFromSeconds(baseSec + subSec);
+      }
+
+      scrubberTimeLabel.textContent = formatHMS(targetDate);
+
+      const R = Math.min(W, H) * 0.78 / 2;
+      const colors = drawClockForDate(W / 2, H / 2 + 8, R, targetDate);
+
+      ctx.fillStyle = '#eeeeee';
+      ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(
+        `${formatHMS(targetDate)}  [${colors.phase.range} : ${colors.phase.name}]`,
+        20, 26
+      );
+
+      ctx.fillStyle = '#9999a5';
+      ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(
+        `長針(明): L=${colors.hsl.l}% / 短針(暗): L=${colors.hsl.bgL}% (明度差 ${colors.hsl.l - colors.hsl.bgL}%)  |  Hue: ${colors.hsl.h}°（画面クリックで8フェーズ一覧へ）`,
+        20, 46
+      );
+
+    } else if (mode === 'compare') {
+      const elapsedSec = (performance.now() - compareStart) / 1000;
+      const d1220 = makeDateFromSeconds(12 * 3600 + 20 * 60 + 45 + elapsedSec);
+      const d1605 = makeDateFromSeconds(16 * 3600 + 5 * 60 + 45 + elapsedSec);
+
+      const cw = W / 2;
+      const ch = H - 50;
+      const R = Math.min(cw, ch) * 0.74 / 2;
+
+      const c1 = drawClockForDate(cw / 2, ch / 2 + 24, R, d1220);
+      const c2 = drawClockForDate(cw + cw / 2, ch / 2 + 24, R, d1605);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#eeeeee';
+      ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(`12:20 (${formatHMS(d1220)}) — 昼下がり [ビビッドシアン＆ネオン]`, cw / 2, 34);
+      ctx.fillText(`16:05 (${formatHMS(d1605)}) — 夕方 [ウォーム夕陽（茜色〜アンバー）]`, cw + cw / 2, 34);
+
+      ctx.fillStyle = '#9999a5';
+      ctx.font = '500 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText(`長針 L:${c1.hsl.l}% vs 短針 L:${c1.hsl.bgL}% (明度差 ${c1.hsl.l - c1.hsl.bgL}%)`, cw / 2, 56);
+      ctx.fillText(`長針 L:${c2.hsl.l}% vs 短針 L:${c2.hsl.bgL}% (明度差 ${c2.hsl.l - c2.hsl.bgL}%)`, cw + cw / 2, 56);
+
+      ctx.fillStyle = '#26262c';
+      ctx.fillRect(cw - 0.5, 0, 1, H);
+
+    } else if (mode === 'all8') {
+      const cols = 4, rows = 2;
+      const topPad = 44;
+      const botPad = 56;
+      const cw = W / cols;
+      const ch = (H - topPad - botPad) / rows;
+      const R = Math.min(cw, ch) * 0.72 / 2;
+      const elapsedSec = (performance.now() - compareStart) / 1000;
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#dddddd';
+      ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+      ctx.fillText('24時間・8フェーズ（短針＝暗・長針＝明のコントラストを保ち、色相で時間帯を表現）', 18, 18);
+
+      for (let i = 0; i < 8; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x0 = col * cw;
+        const y0 = topPad + row * ch;
+        const cx = x0 + cw / 2;
+        const cy = y0 + ch / 2 + 14;
+
+        const d = makeDateFromSeconds(SAMPLE_HOURS[i] * 3600 + 20 * 60 + 45 + elapsedSec);
+        const c = drawClockForDate(cx, cy, R, d);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#eeeeee';
+        ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`${i + 1}. ${c.phase.range}`, cx, y0 + 10);
+
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+        ctx.fillText(`${c.phase.name} [長針L:${c.hsl.l}% / 短針L:${c.hsl.bgL}%]`, cx, y0 + 26);
+
+        if (col > 0) {
+          ctx.fillStyle = '#1f1f24';
+          ctx.fillRect(x0 - 0.5, topPad, 1, H - topPad - botPad);
+        }
+      }
+      ctx.fillStyle = '#1f1f24';
+      ctx.fillRect(0, topPad + ch - 0.5, W, 1);
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ==========================================================================
+   * 4. UIイベント
+   * ========================================================================== */
+  const btnAll8      = document.getElementById('btn-all8');
+  const btnCompare   = document.getElementById('btn-compare');
+  const btnLive      = document.getElementById('btn-live');
+  const btnTimelapse = document.getElementById('btn-timelapse');
+  const btnHourMode  = document.getElementById('btn-hour-mode');
+
+  function setActiveButton(target) {
+    [btnAll8, btnCompare, btnLive, btnTimelapse].forEach(b => b.classList.toggle('active', b === target));
+  }
+
+  btnAll8.addEventListener('click', e => {
+    e.stopPropagation();
+    mode = 'all8';
+    compareStart = performance.now();
+    setActiveButton(btnAll8);
+  });
+
+  btnCompare.addEventListener('click', e => {
+    e.stopPropagation();
+    mode = 'compare';
+    compareStart = performance.now();
+    setActiveButton(btnCompare);
+  });
+
+  btnLive.addEventListener('click', e => {
+    e.stopPropagation();
+    mode = 'live';
+    setActiveButton(btnLive);
+  });
+
+  btnTimelapse.addEventListener('click', e => {
+    e.stopPropagation();
+    mode = 'timelapse';
+    timelapseStart = performance.now();
+    setActiveButton(btnTimelapse);
+  });
+
+  btnHourMode.addEventListener('click', e => {
+    e.stopPropagation();
+    smoothHour = !smoothHour;
+    btnHourMode.textContent = smoothHour ? '短針: 滑らか移動' : '短針: 数字の位置固定';
+    btnHourMode.classList.toggle('active', !smoothHour);
+  });
+
+  slider.addEventListener('input', () => {
+    mode = 'scrub';
+    compareStart = performance.now();
+    setActiveButton(null);
+  });
+
+  canvas.addEventListener('click', e => {
+    if (mode === 'all8') {
+      const topPad = 44, botPad = 56;
+      const col = Math.min(3, Math.max(0, Math.floor((e.clientX / W) * 4)));
+      const row = e.clientY < topPad + (H - topPad - botPad) / 2 ? 0 : 1;
+      const idx = row * 4 + col;
+      slider.value = SAMPLE_HOURS[idx] * 3600 + 20 * 60 + 45;
+      compareStart = performance.now();
+      mode = 'scrub';
+      setActiveButton(null);
+    } else if (mode === 'scrub') {
+      mode = 'all8';
+      setActiveButton(btnAll8);
+    }
+  });
+
+  let idleTimer;
+  function wake() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.body.classList.add('idle'), 3500);
+  }
+  window.addEventListener('mousemove', wake);
+  window.addEventListener('pointerdown', wake);
+  wake();
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
