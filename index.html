@@ -367,6 +367,7 @@
 
   <div class="group-title">ディスプレイ</div>
   <div class="btn-group">
+    <button id="btn-clock-size" class="theme-active">時計サイズ: どーんと大 (90%) ✨</button>
     <button id="btn-wake-lock" class="sec-active">📱 スリープ防止: ON</button>
   </div>
 </div>
@@ -840,6 +841,22 @@
   let themeMode = 'hourGrad'; // 'hourGrad' | 'sky24h' | 'allGrad' | 'classic'
   let gradStyle = 'vertical'; // 'vertical' | 'conic' | 'radial'
   let secGradOn = true;       // 秒リングのグラデーション ON/OFF（ボタンでいつでも切り替え可能）
+  let clockScaleMode = 'large'; // 'large' (90%: どーんと大) | 'huge' (95%: 画面最大) | 'standard' (76%: 標準)
+  try {
+    const savedScale = localStorage.getItem('pieclock.scale');
+    if (['large', 'huge', 'standard'].includes(savedScale)) clockScaleMode = savedScale;
+  } catch (_) {}
+
+  function getClockScaleFactor(isMobile, isPortrait) {
+    if (clockScaleMode === 'huge') {
+      return isMobile ? (isPortrait ? 0.95 : 0.92) : 0.95;
+    } else if (clockScaleMode === 'standard') {
+      return isMobile ? (isPortrait ? 0.78 : 0.72) : 0.74;
+    } else {
+      // 'large' (デフォルト: 画面いっぱいにどーんと大きく表示)
+      return isMobile ? (isPortrait ? 0.92 : 0.88) : 0.90;
+    }
+  }
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
@@ -1430,7 +1447,8 @@
 
       const isMobile = Math.min(W, H) < 600;
       const isPortrait = W < H;
-      const R = Math.min(W, H) * (isMobile ? (isPortrait ? 0.78 : 0.72) : 0.74) / 2;
+      const scaleFactor = getClockScaleFactor(isMobile, isPortrait);
+      const R = Math.min(W, H) * scaleFactor / 2;
       const colors = drawClockForDate(W / 2, H / 2, R, targetDate);
 
       if (!document.body.classList.contains('idle')) {
@@ -1474,7 +1492,8 @@
         const botPad = 72;
         const availH = H - topPad - botPad;
         const ch = availH / 2;
-        const R = Math.min(W * 0.72, ch * 0.70) / 2;
+        const scale = clockScaleMode === 'huge' ? 0.90 : (clockScaleMode === 'standard' ? 0.70 : 0.84);
+        const R = Math.min(W * (scale + 0.02), ch * scale) / 2;
 
         const cy1 = topPad + ch * 0.5 + 8;
         const cy2 = topPad + ch * 1.5 + 8;
@@ -1493,7 +1512,8 @@
       } else {
         const cw = W / 2;
         const ch = H - 76;
-        const R = Math.min(cw, ch) * 0.74 / 2;
+        const scale = clockScaleMode === 'huge' ? 0.90 : (clockScaleMode === 'standard' ? 0.74 : 0.86);
+        const R = Math.min(cw, ch) * scale / 2;
 
         const c1 = drawClockForDate(cw / 2, ch / 2 + 24, R, d1220);
         const c2 = drawClockForDate(cw + cw / 2, ch / 2 + 24, R, d1705);
@@ -1520,7 +1540,8 @@
       const botPad = isPortrait ? 76 : 82;
       const cw = W / cols;
       const ch = (H - topPad - botPad) / rows;
-      const R = Math.min(cw * 0.74, ch * 0.70) / 2;
+      const scale = clockScaleMode === 'huge' ? 0.88 : (clockScaleMode === 'standard' ? 0.70 : 0.82);
+      const R = Math.min(cw * (scale + 0.04), ch * scale) / 2;
       const elapsedSec = ((performance.now() - compareStart) / 1000) % 60;
 
       ctx.textAlign = 'left';
@@ -1577,6 +1598,41 @@
   const mobileMenuBtn  = document.getElementById('mobile-menu-btn');
   const mobileCloseBtn = document.getElementById('mobile-close-btn');
   const btnWakeLock    = document.getElementById('btn-wake-lock');
+  const btnClockSize   = document.getElementById('btn-clock-size');
+
+  function updateClockSizeButton() {
+    if (!btnClockSize) return;
+    if (clockScaleMode === 'huge') {
+      btnClockSize.textContent = '時計サイズ: 画面最大 (95%) 💥';
+      btnClockSize.classList.add('sec-active');
+      btnClockSize.classList.remove('theme-active');
+    } else if (clockScaleMode === 'standard') {
+      btnClockSize.textContent = '時計サイズ: 標準 (76%)';
+      btnClockSize.classList.remove('sec-active', 'theme-active');
+    } else {
+      btnClockSize.textContent = '時計サイズ: どーんと大 (90%) ✨';
+      btnClockSize.classList.add('theme-active');
+      btnClockSize.classList.remove('sec-active');
+    }
+  }
+
+  if (btnClockSize) {
+    btnClockSize.addEventListener('click', e => {
+      e.stopPropagation();
+      if (clockScaleMode === 'large') {
+        clockScaleMode = 'huge';
+      } else if (clockScaleMode === 'huge') {
+        clockScaleMode = 'standard';
+      } else {
+        clockScaleMode = 'large';
+      }
+      try {
+        localStorage.setItem('pieclock.scale', clockScaleMode);
+      } catch (_) {}
+      updateClockSizeButton();
+    });
+    updateClockSizeButton();
+  }
 
   function closeDrawer() {
     toolbar.classList.remove('open');
